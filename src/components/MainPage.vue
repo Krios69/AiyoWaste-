@@ -2,7 +2,7 @@
   <div class="main-page">
     <div class="page-content">
       <div class="welcome-section">
-        <h1>Welcome to AiyoWaste</h1>
+        <h1>elcome to AiyoWaste</h1>
         <p>This is a brand new page using your specified color scheme</p>
       </div>
       
