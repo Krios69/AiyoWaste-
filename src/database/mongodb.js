@@ -91,8 +91,8 @@ export class UserService {
         ...userData,
         createdAt: new Date(),
         updatedAt: new Date(),
-        isActive: true, // 注册后直接激活
-        emailVerified: true
+        isActive: false, // 需要邮箱激活
+        emailVerified: false
       });
       
       console.log('✅ 用户创建成功:', result.insertedId);
@@ -136,6 +136,28 @@ export class UserService {
       return result.modifiedCount > 0;
     } catch (error) {
       console.error('❌ 用户激活失败:', error);
+      return false;
+    }
+  }
+
+  // 更新用户信息
+  async updateUser(email, updateData) {
+    try {
+      const collection = await this.getCollection();
+      const result = await collection.updateOne(
+        { email },
+        { 
+          $set: { 
+            ...updateData,
+            updatedAt: new Date()
+          } 
+        }
+      );
+      
+      console.log('✅ 用户更新成功:', result.modifiedCount);
+      return result.modifiedCount > 0;
+    } catch (error) {
+      console.error('❌ 用户更新失败:', error);
       return false;
     }
   }

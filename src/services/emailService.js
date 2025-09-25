@@ -85,7 +85,87 @@ async function sendVerificationCode(email, code) {
   }
 }
 
+// 发送账户激活邮件
+async function sendActivationEmail(email, code, activationToken) {
+  try {
+    console.log('=== 发送激活邮件 ===');
+    console.log('目标邮箱:', email);
+    console.log('验证码:', code);
+    console.log('激活令牌:', activationToken);
+    
+    // 验证transporter配置
+    console.log('验证SMTP连接...');
+    await transporter.verify();
+    console.log('✅ SMTP连接验证成功');
+    
+    const activationLink = `http://localhost:3000/activate?token=${activationToken}&email=${encodeURIComponent(email)}`;
+    
+    const mailOptions = {
+      from: 'kaih92224@gmail.com',
+      to: email,
+      subject: 'Welcome to AiyoWaste - Activate Your Account',
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background-color: #ffffff;">
+          <!-- Header -->
+          <div style="background-color: #B6CBB3; padding: 30px; text-align: center;">
+            <h1 style="color: #333; margin: 0; font-size: 28px;">Welcome to AiyoWaste!</h1>
+            <p style="color: #555; margin: 10px 0 0 0; font-size: 16px;">Join us in making the world a better place</p>
+          </div>
+          
+          <!-- Body -->
+          <div style="padding: 40px 30px; background-color: #f9f9f9;">
+            <h2 style="color: #333; margin-bottom: 20px;">Account Activation Required</h2>
+            <p style="color: #666; font-size: 16px; line-height: 1.6; margin-bottom: 25px;">
+              Thank you for registering with AiyoWaste! To complete your registration and activate your account, please:
+            </p>
+            
+            <ol style="color: #666; font-size: 16px; line-height: 1.8; margin-bottom: 30px;">
+              <li><strong>Click the activation link below</strong></li>
+              <li><strong>Enter the 6-digit verification code</strong></li>
+              <li><strong>Set your new password</strong></li>
+            </ol>
+            
+            <!-- Activation Button -->
+            <div style="text-align: center; margin: 30px 0;">
+              <a href="${activationLink}" style="display: inline-block; background-color: #B6CBB3; color: #333; padding: 15px 30px; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 16px;">Activate My Account</a>
+            </div>
+            
+            <!-- Verification Code -->
+            <div style="background-color: #DEEDDC; padding: 25px; text-align: center; margin: 25px 0; border-radius: 8px; border: 2px dashed #B6CBB3;">
+              <p style="color: #333; margin: 0 0 10px 0; font-size: 16px;">Your 6-Digit Verification Code:</p>
+              <h1 style="color: #333; font-size: 36px; letter-spacing: 8px; margin: 0; font-family: 'Courier New', monospace;">${code}</h1>
+            </div>
+            
+            <!-- Manual Link -->
+            <div style="background-color: #fff; padding: 20px; border-radius: 8px; margin-top: 25px;">
+              <p style="color: #666; font-size: 14px; margin: 0 0 10px 0;">If the button doesn't work, copy and paste this link:</p>
+              <p style="color: #B6CBB3; font-size: 14px; word-break: break-all; margin: 0;">${activationLink}</p>
+            </div>
+          </div>
+          
+          <!-- Footer -->
+          <div style="background-color: #333; padding: 20px; text-align: center;">
+            <p style="color: #999; font-size: 12px; margin: 0;">This activation link will expire in 24 hours.</p>
+            <p style="color: #999; font-size: 12px; margin: 5px 0 0 0;">AiyoWaste - Sustainable Waste Management Platform</p>
+          </div>
+        </div>
+      `
+    };
+    
+    console.log('发送邮件...');
+    const result = await transporter.sendMail(mailOptions);
+    console.log('✅ 激活邮件发送成功:', result.messageId);
+    
+    return { success: true, messageId: result.messageId };
+  } catch (error) {
+    console.error('❌ 激活邮件发送失败:', error.message);
+    console.error('错误详情:', error);
+    return { success: false, error: error.message };
+  }
+}
+
 export {
   generateVerificationCode,
-  sendVerificationCode
+  sendVerificationCode,
+  sendActivationEmail
 };

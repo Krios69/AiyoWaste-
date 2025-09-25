@@ -21,6 +21,12 @@
           <li class="nav-item">
             <a href="#" class="nav-link">Settings</a>
           </li>
+          <li class="nav-item">
+            <router-link to="/food-inventory" class="nav-link">Food Inventory</router-link>
+          </li>
+          <li class="nav-item">
+            <router-link to="/admin" class="nav-link">Admin</router-link>
+          </li>
         </ul>
         <div class="notification-icon">
           <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
