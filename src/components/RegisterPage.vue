@@ -259,7 +259,7 @@ export default {
         const result = await response.json()
         
         if (result.success) {
-          alert('Registration successful! You can now login.')
+          alert('Registration successful! Please check your email to activate your account.')
           this.$router.push('/login')
         } else {
           alert('Registration failed: ' + result.message)
