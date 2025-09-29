@@ -11,12 +11,13 @@
             <div 
               v-for="item in regularItems" 
               :key="item._id" 
-              class="food-item"
-              @click="selectItem(item)"
+              class="food-item clickable"
+              @click="editItem(item)"
               :class="{ selected: selectedItem && selectedItem._id === item._id }"
+              title="点击编辑食物信息"
             >
               <div class="food-image">
-                <img :src="getFoodImage(item.name)" :alt="item.name" />
+                <img :src="getFoodImage(item)" :alt="item.name" />
               </div>
               <div class="food-name">{{ item.name }}</div>
             </div>
@@ -48,30 +49,21 @@
               v-for="item in expiringItemsList" 
               :key="'exp_' + item._id" 
               class="food-item expiring"
-              @click="selectItem(item)"
               :class="{ selected: selectedItem && selectedItem._id === item._id }"
             >
+              <!-- 捐赠图标 -->
+              <button 
+                class="donate-icon-btn" 
+                @click.stop="markForDonation(item)"
+                title="标记为可捐赠"
+              >
+                <span class="donate-icon">🎁</span>
+              </button>
+              
               <div class="food-image">
-                <img :src="getFoodImage(item.name)" :alt="item.name" />
+                <img :src="getFoodImage(item)" :alt="item.name" />
               </div>
               <div class="food-name">{{ item.name }}</div>
-            </div>
-            <!-- 空占位符 -->
-            <div class="food-item empty" v-if="expiringItemsList.length < 3">
-              <div class="food-image empty-placeholder">
-                <div class="empty-cross">
-                  <div class="line1"></div>
-                  <div class="line2"></div>
-                </div>
-              </div>
-            </div>
-            <div class="food-item empty" v-if="expiringItemsList.length < 2">
-              <div class="food-image empty-placeholder">
-                <div class="empty-cross">
-                  <div class="line1"></div>
-                  <div class="line2"></div>
-                </div>
-              </div>
             </div>
           </div>
         </div>
@@ -100,17 +92,6 @@
         style="transition-delay: 0.2s"
       >
         <span class="list-icon">☰</span>
-      </button>
-      
-      <button 
-        class="floating-btn edit-btn" 
-        @click="editSelectedItem" 
-        :disabled="!selectedItem" 
-        title="Edit Selected Item"
-        :class="{ 'show': showFloatingMenu }"
-        style="transition-delay: 0.3s"
-      >
-        <span class="edit-icon">✏️</span>
       </button>
       
       <!-- 主按钮 -->
@@ -184,18 +165,34 @@
       @close="showEditFoodModal = false"
       @food-updated="onFoodUpdated"
     />
+    
+    <!-- 捐赠表单模态框 -->
+    <DonationFormModal 
+      v-if="showDonationModal"
+      :item="donationItem"
+      @close="showDonationModal = false"
+      @donation-created="onDonationCreated"
+    />
   </div>
 </template>
 
 <script>
 import AddFoodModal from './AddFoodModal.vue'
 import EditFoodModal from './EditFoodModal.vue'
+import DonationFormModal from './DonationFormModal.vue'
+import { inject } from 'vue'
+import { user } from '../store/auth.js'
 
 export default {
   name: 'FoodInventoryPage',
   components: {
     AddFoodModal,
-    EditFoodModal
+    EditFoodModal,
+    DonationFormModal
+  },
+  setup() {
+    const auth = inject('auth')
+    return { auth }
   },
   data() {
     return {
@@ -204,9 +201,11 @@ export default {
       filterCategory: 'all',
       showAddFoodModal: false,
       showEditFoodModal: false,
+      showDonationModal: false,
       showListView: false,
       showFloatingMenu: false,
       editingItem: null,
+      donationItem: null,
       selectedItem: null,
       isLoading: false
     }
@@ -273,7 +272,21 @@ export default {
     async loadInventory() {
       this.isLoading = true
       try {
-        const response = await fetch('http://localhost:3001/api/food-inventory')
+        // 检查用户是否已登录
+        if (!this.auth || !user.value) {
+          console.log('❌ 用户未登录，跳转到登录页面')
+          alert('Please login to view your food inventory')
+          this.$router.push('/login')
+          return
+        }
+        
+        console.log('✅ 用户已登录，用户ID:', user.value.id)
+        
+        const response = await fetch('http://localhost:3001/api/food-inventory', {
+          headers: {
+            'x-user-id': user.value.id
+          }
+        })
         const result = await response.json()
         
         if (result.success) {
@@ -341,7 +354,10 @@ export default {
       
       try {
         const response = await fetch(`http://localhost:3001/api/food-inventory/${itemId}`, {
-          method: 'DELETE'
+          method: 'DELETE',
+          headers: {
+            'x-user-id': user.value.id
+          }
         })
         const result = await response.json()
         
@@ -357,27 +373,14 @@ export default {
       }
     },
     
-    async markForDonation(item) {
-      if (!confirm(`Mark "${item.name}" for donation?`)) {
-        return
-      }
-      
-      try {
-        const response = await fetch(`http://localhost:3001/api/food-inventory/${item._id}/donate`, {
-          method: 'PATCH'
-        })
-        const result = await response.json()
-        
-        if (result.success) {
-          alert('Item marked for donation!')
-          this.loadInventory()
-        } else {
-          alert('Failed to mark for donation: ' + result.message)
-        }
-      } catch (error) {
-        console.error('Error marking for donation:', error)
-        alert('Failed to mark for donation. Please try again.')
-      }
+    markForDonation(item) {
+      this.donationItem = item
+      this.showDonationModal = true
+    },
+    
+    onDonationCreated() {
+      this.showDonationModal = false
+      this.loadInventory()
     },
     
     goToDonations() {
@@ -398,23 +401,19 @@ export default {
       this.selectedItem = item
     },
     
-    editSelectedItem() {
-      if (this.selectedItem) {
-        this.editItem(this.selectedItem)
-      }
-    },
-    
-    getFoodImage(itemName) {
-      // 根据食物名称返回默认图片
-      const foodImages = {
-        'banana': 'https://images.unsplash.com/photo-1571771894821-ce9b6c11b08e?w=150&h=150&fit=crop&crop=center',
-        'sardine': 'https://images.unsplash.com/photo-1544943910-4c1dc44aab44?w=150&h=150&fit=crop&crop=center',
-        'apple': 'https://images.unsplash.com/photo-1560806887-1e4cd0b6cbd6?w=150&h=150&fit=crop&crop=center',
-        'bread': 'https://images.unsplash.com/photo-1509440159596-0249088772ff?w=150&h=150&fit=crop&crop=center'
+    getFoodImage(item) {
+      // 优先显示Unsplash生成的图片
+      if (item.imagePath) {
+        // 如果imagePath是完整的URL，直接返回
+        if (item.imagePath.startsWith('http')) {
+          return item.imagePath
+        }
+        // 如果是相对路径，添加服务器地址
+        return `http://localhost:3001${item.imagePath}`
       }
       
-      const name = itemName.toLowerCase()
-      return foodImages[name] || `https://images.unsplash.com/photo-1567620905732-2d1ec7ab7445?w=150&h=150&fit=crop&crop=center`
+      // 如果没有Unsplash图片，显示占位符
+      return 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTUwIiBoZWlnaHQ9IjE1MCIgdmlld0JveD0iMCAwIDE1MCAxNTAiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CjxyZWN0IHdpZHRoPSIxNTAiIGhlaWdodD0iMTUwIiBmaWxsPSIjRjVGNUY1Ii8+CjxwYXRoIGQ9Ik02MCA2MEg5MFY5MEg2MFY2MFoiIGZpbGw9IiNEOUQ5RDkiLz4KPHN2ZyB4PSI2NSIgeT0iNjUiIHdpZHRoPSIyMCIgaGVpZ2h0PSIyMCIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSIjOTk5OTk5Ij4KPHBhdGggZD0iTTEyIDJDMTMuMSAyIDE0IDIuOSAxNCA0VjhIMThWMjBINlY4SDEwVjRDMTAgMi45IDEwLjkgMiAxMiAyWk0xMiA0VjZIMTJWNFpNOCAxMFYxOEgxNlYxMEg4WiIvPgo8L3N2Zz4KPC9zdmc+'
     },
     
     toggleFloatingMenu() {
@@ -489,6 +488,7 @@ export default {
 .food-item.expiring {
   background: #FFF3CD;
   border: 2px solid #FFC107;
+  position: relative !important;
 }
 
 .food-item.empty {
@@ -500,6 +500,77 @@ export default {
 .food-item.empty:hover {
   background: #e9ecef;
   border-color: #adb5bd;
+}
+
+.food-item.clickable {
+  cursor: pointer;
+  position: relative;
+}
+
+.food-item.clickable:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.15);
+  border: 2px solid #007bff;
+}
+
+.food-item.clickable::after {
+  content: '✏️';
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  font-size: 12px;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.food-item.clickable:hover::after {
+  opacity: 1;
+}
+
+/* 捐赠按钮样式 */
+.donate-icon-btn {
+  position: absolute !important;
+  top: 5px !important;
+  right: 5px !important;
+  background: transparent !important;
+  border: none !important;
+  border-radius: 0 !important;
+  width: auto !important;
+  height: auto !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  cursor: pointer !important;
+  font-size: 20px !important;
+  box-shadow: none !important;
+  transition: all 0.3s ease !important;
+  z-index: 100 !important;
+  opacity: 1 !important;
+  visibility: visible !important;
+  pointer-events: auto !important;
+  padding: 0 !important;
+}
+
+.donate-icon-btn:hover {
+  background: transparent !important;
+  border: none !important;
+  transform: scale(1.2);
+  box-shadow: none !important;
+}
+
+.donate-icon-btn:active {
+  transform: scale(0.95);
+}
+
+.donate-icon {
+  font-size: 20px;
+  line-height: 1;
+  transition: all 0.3s ease;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.3));
+}
+
+.donate-icon-btn:hover .donate-icon {
+  filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.5));
 }
 
 .food-image {
@@ -626,21 +697,6 @@ export default {
   pointer-events: none;
 }
 
-.floating-btn.edit-btn {
-  background: linear-gradient(135deg, #FF9800, #F57C00);
-  color: white;
-  box-shadow: 0 6px 25px rgba(255, 152, 0, 0.4);
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  opacity: 0;
-  transform: scale(0) translateY(0);
-  pointer-events: none;
-}
-
-.floating-btn.edit-btn:disabled {
-  background: linear-gradient(135deg, #ccc, #bbb);
-  cursor: not-allowed;
-  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
-}
 
 /* 展开状态 */
 .floating-btn.show {
@@ -657,9 +713,6 @@ export default {
   transform: scale(1) translateY(-160px);
 }
 
-.floating-btn.edit-btn.show {
-  transform: scale(1) translateY(-240px);
-}
 
 /* 悬停效果 */
 .floating-btn:hover:not(:disabled):not(.main-btn) {
@@ -677,10 +730,6 @@ export default {
   box-shadow: 0 8px 30px rgba(139, 195, 74, 0.5);
 }
 
-.floating-btn.edit-btn:hover:not(:disabled) {
-  --translate-y: -240px;
-  box-shadow: 0 8px 30px rgba(255, 152, 0, 0.5);
-}
 
 /* 图标样式 */
 .plus-icon {
@@ -890,9 +939,6 @@ export default {
     transform: scale(1) translateY(-140px);
   }
   
-  .floating-btn.edit-btn.show {
-    transform: scale(1) translateY(-210px);
-  }
   
   .floating-btn.add-btn:hover:not(:disabled) {
     --translate-y: -70px;
@@ -902,9 +948,6 @@ export default {
     --translate-y: -140px;
   }
   
-  .floating-btn.edit-btn:hover:not(:disabled) {
-    --translate-y: -210px;
-  }
   
   .plus-icon {
     font-size: 1.5rem;
@@ -945,20 +988,12 @@ export default {
     transform: scale(1) translateY(-120px);
   }
   
-  .floating-btn.edit-btn.show {
-    transform: scale(1) translateY(-180px);
-  }
-  
   .floating-btn.add-btn:hover:not(:disabled) {
     --translate-y: -60px;
   }
   
   .floating-btn.list-btn:hover:not(:disabled) {
     --translate-y: -120px;
-  }
-  
-  .floating-btn.edit-btn:hover:not(:disabled) {
-    --translate-y: -180px;
   }
   
   .plus-icon {
