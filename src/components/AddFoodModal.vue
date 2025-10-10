@@ -10,15 +10,32 @@
         <!-- 物品名称 -->
         <div class="form-group">
           <label for="name" class="required">Food Item Name</label>
-          <input 
-            id="name"
-            v-model="form.name" 
-            type="text" 
-            class="form-input"
-            placeholder="e.g., Apples, Canned Tomatoes"
-            required
-          />
+          <div class="name-input-container">
+            <input 
+              id="name"
+              v-model="form.name" 
+              type="text" 
+              class="form-input"
+              placeholder="e.g., Apples, Canned Tomatoes"
+              required
+            />
+            <button
+              type="button"
+              class="generate-image-btn"
+              @click="generateImage"
+              :disabled="!form.name.trim() || isGeneratingImage"
+              title="use Unsplash to generate food image"
+            >
+              {{ isGeneratingImage ? '🌐 generating...' : 'img generate' }}
+            </button>
+          </div>
           <div v-if="errors.name" class="error-message">{{ errors.name }}</div>
+          
+          <!-- 生成的图片预览 -->
+          <div v-if="generatedImagePath" class="image-preview">
+            <img :src="generatedImagePath" :alt="form.name" class="preview-image" />
+            <button type="button" class="remove-image-btn" @click="removeGeneratedImage">✕</button>
+          </div>
         </div>
 
         <!-- 数量 -->
@@ -144,8 +161,15 @@
 </template>
 
 <script>
+import { inject } from 'vue'
+import { user } from '../store/auth.js'
+
 export default {
   name: 'AddFoodModal',
+  setup() {
+    const auth = inject('auth')
+    return { auth }
+  },
   data() {
     return {
       form: {
@@ -159,7 +183,9 @@ export default {
         notes: ''
       },
       errors: {},
-      isSubmitting: false
+      isSubmitting: false,
+      isGeneratingImage: false,
+      generatedImagePath: null,
     }
   },
   computed: {
@@ -171,6 +197,48 @@ export default {
     closeModal() {
       this.$emit('close')
     },
+
+    async generateImage() {
+      if (!this.form.name.trim()) {
+        return
+      }
+
+      this.isGeneratingImage = true
+      
+      try {
+        const response = await fetch('http://localhost:3001/api/generate-food-image', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            foodName: this.form.name.trim()
+          })
+        })
+
+        const result = await response.json()
+
+        if (result.success) {
+          // 使用Unsplash生成的图片URL
+          this.generatedImagePath = result.imageUrl || `http://localhost:3001${result.imagePath}`
+          console.log('✅ Unsplash图片生成成功:', this.generatedImagePath)
+          alert('🌐 图片生成成功！这是从Unsplash获取的高质量食物照片。')
+        } else {
+          console.error('❌ 图片生成失败:', result.error)
+          alert(`🌐 图片生成失败\n\n${result.error}\n\n请检查网络连接或稍后重试。`)
+        }
+      } catch (error) {
+        console.error('❌ 图片生成请求失败:', error)
+        alert('Failed to generate image. Please try again.')
+      } finally {
+        this.isGeneratingImage = false
+      }
+    },
+
+    removeGeneratedImage() {
+      this.generatedImagePath = null
+    },
+
     
     validateForm() {
       this.errors = {}
@@ -217,13 +285,22 @@ export default {
           expiryDate: this.form.expiryDate,
           category: this.form.category === 'Other' ? this.form.customCategory : this.form.category,
           location: this.form.location === 'Other' ? this.form.customLocation : this.form.location,
-          notes: this.form.notes.trim()
+          notes: this.form.notes.trim(),
+          imagePath: this.generatedImagePath ? this.generatedImagePath.replace('http://localhost:3001', '') : null // 包含Unsplash生成的图片路径
+        }
+        
+        // 检查用户是否已登录
+        if (!this.auth || !user.value) {
+          alert('Please login to add food items')
+          this.$emit('close')
+          return
         }
         
         const response = await fetch('http://localhost:3001/api/food-inventory', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
+            'x-user-id': user.value.id
           },
           body: JSON.stringify(submitData)
         })
@@ -335,6 +412,86 @@ export default {
   border-color: #B6CBB3;
 }
 
+/* 名称输入容器 */
+.name-input-container {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.name-input-container .form-input {
+  flex: 1;
+}
+
+/* 图片生成按钮 */
+.generate-image-btn {
+  background: linear-gradient(135deg, #4CAF50, #45a049);
+  border: none;
+  border-radius: 6px;
+  color: white;
+  padding: 12px 16px;
+  font-size: 1rem;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  min-width: 50px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.generate-image-btn:hover:not(:disabled) {
+  background: linear-gradient(135deg, #45a049, #3d8b40);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(76, 175, 80, 0.3);
+}
+
+.generate-image-btn:disabled {
+  background: #ccc;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+/* 图片预览 */
+.image-preview {
+  position: relative;
+  margin-top: 10px;
+  display: inline-block;
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.preview-image {
+  width: 120px;
+  height: 120px;
+  object-fit: cover;
+  border-radius: 8px;
+}
+
+.remove-image-btn {
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  background: rgba(255, 0, 0, 0.8);
+  border: none;
+  border-radius: 50%;
+  color: white;
+  width: 24px;
+  height: 24px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  transition: all 0.3s ease;
+}
+
+.remove-image-btn:hover {
+  background: rgba(255, 0, 0, 1);
+  transform: scale(1.1);
+}
+
 .form-textarea {
   resize: vertical;
   min-height: 80px;
@@ -344,6 +501,62 @@ export default {
   color: #e74c3c;
   font-size: 0.85rem;
   margin-top: 5px;
+}
+
+.generate-image-btn {
+  background: #3498db;
+  color: white;
+  border: none;
+  padding: 8px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  margin-left: 10px;
+  transition: background-color 0.2s;
+}
+
+.generate-image-btn:hover:not(:disabled) {
+  background: #2980b9;
+}
+
+.generate-image-btn:disabled {
+  background: #bdc3c7;
+  cursor: not-allowed;
+}
+
+.image-preview {
+  margin-top: 15px;
+  text-align: center;
+  position: relative;
+  display: inline-block;
+}
+
+.preview-image {
+  max-width: 150px;
+  max-height: 150px;
+  border-radius: 8px;
+  border: 2px solid #e0e0e0;
+}
+
+.remove-image-btn {
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  background: #e74c3c;
+  color: white;
+  border: none;
+  border-radius: 50%;
+  width: 24px;
+  height: 24px;
+  cursor: pointer;
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.remove-image-btn:hover {
+  background: #c0392b;
 }
 
 .form-actions {

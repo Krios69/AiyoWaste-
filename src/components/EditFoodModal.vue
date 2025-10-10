@@ -143,8 +143,15 @@
 </template>
 
 <script>
+import { inject } from 'vue'
+import { user } from '../store/auth.js'
+
 export default {
   name: 'EditFoodModal',
+  setup() {
+    const auth = inject('auth')
+    return { auth }
+  },
   props: {
     foodItem: {
       type: Object,
@@ -239,10 +246,18 @@ export default {
           notes: this.form.notes.trim()
         }
         
+        // 检查用户是否已登录
+        if (!this.auth || !user.value) {
+          alert('Please login to edit food items')
+          this.$emit('close')
+          return
+        }
+        
         const response = await fetch(`http://localhost:3001/api/food-inventory/${this.foodItem._id}`, {
           method: 'PUT',
           headers: {
             'Content-Type': 'application/json',
+            'x-user-id': user.value.id
           },
           body: JSON.stringify(submitData)
         })

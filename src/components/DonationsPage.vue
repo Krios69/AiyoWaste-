@@ -208,11 +208,17 @@
 
 <script>
 import CreateDonationModal from './CreateDonationModal.vue'
+import { inject } from 'vue'
+import { user } from '../store/auth.js'
 
 export default {
   name: 'DonationsPage',
   components: {
     CreateDonationModal
+  },
+  setup() {
+    const auth = inject('auth')
+    return { auth }
   },
   data() {
     return {
@@ -235,7 +241,19 @@ export default {
   methods: {
     async loadDonationItems() {
       try {
-        const response = await fetch('http://localhost:3001/api/food-inventory?forDonation=true')
+        // 检查用户是否已登录
+        if (!this.auth || !user.value) {
+          console.log('❌ 用户未登录，跳转到登录页面')
+          alert('Please login to view donation items')
+          this.$router.push('/login')
+          return
+        }
+        
+        const response = await fetch('http://localhost:3001/api/food-inventory?forDonation=true', {
+          headers: {
+            'x-user-id': user.value.id
+          }
+        })
         const result = await response.json()
         
         if (result.success) {
@@ -251,7 +269,16 @@ export default {
 
     async loadPublishedDonations() {
       try {
-        const response = await fetch('http://localhost:3001/api/donations')
+        // 检查用户是否已登录
+        if (!this.auth || !user.value) {
+          return // 不显示错误，因为这个功能可能不需要认证
+        }
+        
+        const response = await fetch('http://localhost:3001/api/donations', {
+          headers: {
+            'x-user-id': user.value.id
+          }
+        })
         const result = await response.json()
         
         if (result.success) {

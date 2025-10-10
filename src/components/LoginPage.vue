@@ -58,8 +58,14 @@
 </template>
 
 <script>
+import { inject } from 'vue'
+
 export default {
   name: 'LoginPage',
+  setup() {
+    const auth = inject('auth')
+    return { auth }
+  },
   data() {
     return {
       email: '',
@@ -89,7 +95,8 @@ export default {
         const result = await response.json()
         
         if (result.success) {
-          // 登录成功，跳转到主页面
+          // 登录成功，更新全局状态并跳转到主页面
+          this.auth.login(result.user)
           alert('Login successful!')
           this.$router.push('/')
         } else {

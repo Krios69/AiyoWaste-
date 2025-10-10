@@ -1,0 +1,24 @@
+<svg width="400" height="400" viewBox="0 0 400 400" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" style="stop-color:#f8f9fa;stop-opacity:1" />
+          <stop offset="100%" style="stop-color:#e9ecef;stop-opacity:1" />
+        </linearGradient>
+        <linearGradient id="food" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" style="stop-color:#28a745;stop-opacity:0.8" />
+          <stop offset="100%" style="stop-color:#20c997;stop-opacity:0.6" />
+        </linearGradient>
+      </defs>
+      <rect width="400" height="400" fill="url(#bg)"/>
+      <circle cx="200" cy="160" r="70" fill="url(#food)"/>
+      <rect x="150" y="210" width="100" height="50" rx="8" fill="url(#food)"/>
+      <text x="200" y="290" text-anchor="middle" font-family="Arial, sans-serif" font-size="28" font-weight="bold" fill="#495057">
+        chocolate
+      </text>
+      <text x="200" y="320" text-anchor="middle" font-family="Arial, sans-serif" font-size="16" fill="#6c757d">
+        Food Item
+      </text>
+      <text x="200" y="350" text-anchor="middle" font-family="Arial, sans-serif" font-size="12" fill="#adb5bd">
+        Generated Placeholder
+      </text>
+    </svg>

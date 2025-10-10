@@ -20,6 +20,7 @@ export class FoodInventoryService {
         ...foodData,
         userId,
         forDonation: false,
+        imagePath: foodData.imagePath || null, // 存储Unsplash生成的图片路径
         createdAt: new Date(),
         updatedAt: new Date()
       });
@@ -51,11 +52,20 @@ export class FoodInventoryService {
   }
 
   // 更新食物物品
-  async updateFoodItem(itemId, updateData) {
+  async updateFoodItem(itemId, updateData, userId = null) {
     try {
       const collection = await this.getCollection();
+      
+      // 构建查询条件
+      const query = { _id: new ObjectId(itemId) };
+      
+      // 如果提供了userId，确保只能更新自己的物品
+      if (userId) {
+        query.userId = userId;
+      }
+      
       const result = await collection.updateOne(
-        { _id: new ObjectId(itemId) },
+        query,
         { 
           $set: { 
             ...updateData,

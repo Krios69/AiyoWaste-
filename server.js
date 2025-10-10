@@ -1,9 +1,11 @@
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
+import path from 'path';
 import { generateVerificationCode, sendVerificationCode, sendActivationEmail } from './src/services/emailService.js';
 import { connectToDatabase, UserService, VerificationService, getDatabase } from './src/database/mongodb.js';
 import { FoodInventoryService, DonationService } from './src/database/foodService.js';
+import unsplashImageService from './src/services/unsplashImageService.js';
 import { ObjectId } from 'mongodb';
 
 // 加载环境变量
@@ -15,6 +17,9 @@ const PORT = process.env.PORT || 3001;
 // 中间件
 app.use(cors());
 app.use(express.json());
+
+// 静态文件服务 - 用于提供生成的图片
+app.use('/generated-images', express.static(path.join(process.cwd(), 'public', 'generated-images')));
 
 // 初始化数据库连接
 let userService, verificationService, foodInventoryService, donationService;
@@ -527,13 +532,58 @@ app.delete('/api/admin/codes/:codeId', async (req, res) => {
   }
 });
 
+
+// ========== 图片生成 API ==========
+
+// 生成食物图片（使用Unsplash）
+app.post('/api/generate-food-image', async (req, res) => {
+  try {
+    const { foodName } = req.body;
+    
+    if (!foodName) {
+      return res.status(400).json({ success: false, message: 'Food name is required' });
+    }
+    
+    console.log(`🌐 收到图片生成请求: ${foodName}`);
+    
+    // 调用Unsplash图片生成服务
+    const result = await unsplashImageService.generateFoodImage(foodName);
+    
+    if (result.success) {
+      res.json({ 
+        success: true, 
+        imagePath: result.imagePath,
+        imageUrl: result.imageUrl,
+        message: 'Image generated successfully from Unsplash'
+      });
+    } else {
+      res.status(500).json({ 
+        success: false, 
+        message: 'Failed to generate image',
+        error: result.error
+      });
+    }
+  } catch (error) {
+    console.error('Error generating food image:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: 'Internal server error',
+      error: error.message
+    });
+  }
+});
+
 // ========== 食物库存管理 API ==========
 
 // 获取食物库存
 app.get('/api/food-inventory', async (req, res) => {
   try {
-    // 模拟用户ID（实际应用中应该从认证token中获取）
-    const userId = 'demo-user-id';
+    // 从请求头获取用户ID（实际应用中应该从认证token中获取）
+    const userId = req.headers['x-user-id'];
+    if (!userId) {
+      return res.status(401).json({ success: false, message: 'User authentication required' });
+    }
+    
     const forDonation = req.query.forDonation === 'true';
     
     const filters = {};
@@ -557,7 +607,12 @@ app.get('/api/food-inventory', async (req, res) => {
 // 添加食物物品
 app.post('/api/food-inventory', async (req, res) => {
   try {
-    const userId = 'demo-user-id';
+    // 从请求头获取用户ID
+    const userId = req.headers['x-user-id'];
+    if (!userId) {
+      return res.status(401).json({ success: false, message: 'User authentication required' });
+    }
+    
     const result = await foodInventoryService.addFoodItem(userId, req.body);
     
     if (result.success) {
@@ -575,7 +630,13 @@ app.post('/api/food-inventory', async (req, res) => {
 app.put('/api/food-inventory/:itemId', async (req, res) => {
   try {
     const { itemId } = req.params;
-    const result = await foodInventoryService.updateFoodItem(itemId, req.body);
+    const userId = req.headers['x-user-id'];
+    
+    if (!userId) {
+      return res.status(401).json({ success: false, message: 'User authentication required' });
+    }
+    
+    const result = await foodInventoryService.updateFoodItem(itemId, req.body, userId);
     
     if (result) {
       res.json({ success: true });
@@ -629,7 +690,12 @@ app.patch('/api/food-inventory/:itemId/donate', async (req, res) => {
 // 获取捐赠记录
 app.get('/api/donations', async (req, res) => {
   try {
-    const userId = 'demo-user-id';
+    // 从请求头获取用户ID
+    const userId = req.headers['x-user-id'];
+    if (!userId) {
+      return res.status(401).json({ success: false, message: 'User authentication required' });
+    }
+    
     const result = await donationService.getDonations(userId);
     
     if (result.success) {
@@ -646,7 +712,12 @@ app.get('/api/donations', async (req, res) => {
 // 创建捐赠记录
 app.post('/api/donations', async (req, res) => {
   try {
-    const userId = 'demo-user-id';
+    // 从请求头获取用户ID
+    const userId = req.headers['x-user-id'];
+    if (!userId) {
+      return res.status(401).json({ success: false, message: 'User authentication required' });
+    }
+    
     const result = await donationService.createDonation(userId, req.body);
     
     if (result.success) {
@@ -673,6 +744,92 @@ app.delete('/api/donations/:donationId', async (req, res) => {
     }
   } catch (error) {
     console.error('Error deleting donation:', error);
+    res.status(500).json({ success: false, message: 'Internal server error' });
+  }
+});
+
+// 获取用户的捐赠食物列表
+app.get('/api/donation-items', async (req, res) => {
+  try {
+    const userId = req.headers['x-user-id'];
+    if (!userId) {
+      return res.status(401).json({ success: false, message: 'User authentication required' });
+    }
+    
+    const result = await foodInventoryService.getFoodItems(userId, { forDonation: true });
+    
+    if (result.success) {
+      // 为每个捐赠物品添加是否可以取消的信息
+      const donationItems = result.items.map(item => {
+        const donationTime = new Date(item.donationInfo?.createdAt || item.updatedAt);
+        const now = new Date();
+        const hoursSinceDonation = (now - donationTime) / (1000 * 60 * 60);
+        const canCancel = hoursSinceDonation <= 8;
+        
+        return {
+          ...item,
+          canCancel,
+          hoursSinceDonation: Math.round(hoursSinceDonation * 10) / 10
+        };
+      });
+      
+      res.json({ success: true, items: donationItems });
+    } else {
+      res.status(500).json({ success: false, message: result.error });
+    }
+  } catch (error) {
+    console.error('Error fetching donation items:', error);
+    res.status(500).json({ success: false, message: 'Internal server error' });
+  }
+});
+
+// 取消捐赠
+app.put('/api/donation-items/:itemId/cancel', async (req, res) => {
+  try {
+    const { itemId } = req.params;
+    const userId = req.headers['x-user-id'];
+    
+    if (!userId) {
+      return res.status(401).json({ success: false, message: 'User authentication required' });
+    }
+    
+    // 首先获取物品信息，检查是否可以取消
+    const itemsResult = await foodInventoryService.getFoodItems(userId, { forDonation: true });
+    if (!itemsResult.success) {
+      return res.status(500).json({ success: false, message: 'Failed to fetch item information' });
+    }
+    
+    const item = itemsResult.items.find(i => i._id.toString() === itemId);
+    if (!item) {
+      return res.status(404).json({ success: false, message: 'Donation item not found' });
+    }
+    
+    // 检查是否超过8小时
+    const donationTime = new Date(item.donationInfo?.createdAt || item.updatedAt);
+    const now = new Date();
+    const hoursSinceDonation = (now - donationTime) / (1000 * 60 * 60);
+    
+    if (hoursSinceDonation > 8) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Cannot cancel donation after 8 hours',
+        hoursSinceDonation: Math.round(hoursSinceDonation * 10) / 10
+      });
+    }
+    
+    // 取消捐赠：将forDonation设为false，清除donationInfo
+    const updateResult = await foodInventoryService.updateFoodItem(itemId, {
+      forDonation: false,
+      donationInfo: null
+    }, userId);
+    
+    if (updateResult) {
+      res.json({ success: true, message: 'Donation cancelled successfully' });
+    } else {
+      res.status(404).json({ success: false, message: 'Failed to cancel donation' });
+    }
+  } catch (error) {
+    console.error('Error cancelling donation:', error);
     res.status(500).json({ success: false, message: 'Internal server error' });
   }
 });
