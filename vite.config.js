@@ -8,3 +8,4 @@ export default defineConfig({
     open: true
   }
 })
+//vite.config.js
