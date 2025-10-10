@@ -105,7 +105,6 @@
       </button>
     </div>
 
-    <!-- 列表视图模态框 -->
     <div v-if="showListView" class="list-modal-overlay" @click="showListView = false">
       <div class="list-modal" @click.stop>
         <div class="list-header">
