@@ -2,24 +2,11 @@
   <div class="main-page">
     <div class="page-content">
       <div class="welcome-section">
-        <h1>elcome to AiyoWaste</h1>
-        <p>This is a brand new page using your specified color scheme</p>
+        <h1>Welcome to AiyoWaste</h1>
+        <p>This is a brand page using your specified color scheme</p>
       </div>
       
-      <div class="features-grid">
-        <div class="feature-card">
-          <h3>Inventory Management</h3>
-          <p>Easily manage your inventory items</p>
-        </div>
-        <div class="feature-card">
-          <h3>Data Analytics</h3>
-          <p>View detailed statistical reports</p>
-        </div>
-        <div class="feature-card">
-          <h3>Smart Notifications</h3>
-          <p>Get timely reminders for important matters</p>
-        </div>
-      </div>
+      
     </div>
   </div>
 </template>
