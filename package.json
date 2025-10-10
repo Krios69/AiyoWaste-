@@ -1,7 +1,7 @@
 {
   "name": "aiyo-waste",
   "version": "1.0.0",
-  "description": "A Vue.js project",
+  "description": "A Vue.js project for waste management",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -26,4 +26,5 @@
     "concurrently": "^9.2.1",
     "vite": "^5.0.0"
   }
+  
 }
