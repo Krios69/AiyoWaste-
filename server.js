@@ -31,9 +31,9 @@ async function initializeDatabase() {
     verificationService = new VerificationService();
     foodInventoryService = new FoodInventoryService();
     donationService = new DonationService();
-    console.log('✅ 数据库服务初始化完成');
+    console.log('✅ The database service initialization has been completed');
   } catch (error) {
-    console.error('❌ 数据库初始化失败:', error);
+    console.error('❌ Database initialization failed:', error);
     process.exit(1);
   }
 }
@@ -44,47 +44,47 @@ initializeDatabase();
 // 发送验证码API
 app.post('/api/send-verification-code', async (req, res) => {
   try {
-    console.log('=== 开始发送验证码 ===');
+    console.log('=== Start sending verification codes ===');
     const { email } = req.body;
-    console.log('请求邮箱:', email);
+    console.log('Request email:', email);
     
     if (!email) {
-      console.log('错误: 邮箱为空');
+      console.log('Error: The mailbox is empty');
       return res.status(400).json({ success: false, message: 'Email is required' });
     }
 
     // 检查用户是否已存在
     const existingUser = await userService.findByEmail(email);
     if (existingUser) {
-      console.log('用户已存在:', email);
+      console.log('The user already exists.:', email);
       return res.status(400).json({ success: false, message: 'User already exists' });
     }
 
     // 生成验证码
     const code = generateVerificationCode();
-    console.log('生成验证码:', code);
+    console.log('Generate verification codes:', code);
     
     // 存储验证码到数据库
     const storeResult = await verificationService.storeCode(email, code);
     if (!storeResult.success) {
-      console.log('验证码存储失败:', storeResult.error);
+      console.log('Verification code storage failed:', storeResult.error);
       return res.status(500).json({ success: false, message: 'Failed to store verification code' });
     }
     
     // 发送邮件
-    console.log('准备发送邮件...');
+    console.log('Ready to send the email...');
     const result = await sendVerificationCode(email, code);
-    console.log('邮件发送结果:', result);
+    console.log('Email sending result:', result);
     
     if (result.success) {
-      console.log('验证码发送成功');
+      console.log('The verification code has been sent successfully');
       res.json({ 
         success: true, 
         message: 'Verification code sent successfully',
         messageId: result.messageId
       });
     } else {
-      console.log('验证码发送失败:', result.error);
+      console.log('The verification code failed to be sent:', result.error);
       res.status(500).json({ 
         success: false, 
         message: 'Failed to send verification code',
@@ -92,10 +92,10 @@ app.post('/api/send-verification-code', async (req, res) => {
       });
     }
   } catch (error) {
-    console.error('=== API错误 ===');
-    console.error('错误类型:', error.name);
-    console.error('错误信息:', error.message);
-    console.error('错误堆栈:', error.stack);
+    console.error('=== API error ===');
+    console.error('Error type:', error.name);
+    console.error('Error message:', error.message);
+    console.error('Error stack:', error.stack);
     res.status(500).json({ 
       success: false, 
       message: 'Internal server error',
@@ -133,9 +133,9 @@ app.post('/api/verify-code', async (req, res) => {
 // 用户注册API
 app.post('/api/register', async (req, res) => {
   try {
-    console.log('=== 开始用户注册 ===');
+    console.log('=== Start user registration ===');
     const { fullName, email, password, confirmPassword, householdSize } = req.body;
-    console.log('注册数据:', { fullName, email, householdSize });
+    console.log('Registration data:', { fullName, email, householdSize });
     
     // 验证必填字段
     if (!fullName || !email || !password || !confirmPassword) {
