@@ -20,8 +20,11 @@ export default {
     isRegisterPage() {
       return this.$route.path === '/register'
     },
+    isActivatePage() {
+      return this.$route.path === '/activate'
+    },
     hideNavBar() {
-      return this.isLoginPage || this.isRegisterPage
+      return this.isLoginPage || this.isRegisterPage || this.isActivatePage
     }
   }
 }
