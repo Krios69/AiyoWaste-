@@ -21,7 +21,7 @@
               </div>
               <div class="food-name">{{ item.name }}</div>
             </div>
-            <!-- 空占位符 -->
+
             <div class="food-item empty" @click="showAddFoodModal = true">
               <div class="food-image empty-placeholder">
                 <div class="empty-cross">
