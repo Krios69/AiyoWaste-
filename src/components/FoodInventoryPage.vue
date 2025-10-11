@@ -1,10 +1,22 @@
 <template>
   <div class="food-inventory-page">
+    <!-- View List Button -->
+    <button 
+      class="view-list-btn" 
+      @click="showListView = !showListView"
+      title="View List"
+    >
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+        <path d="M3 12h18M3 6h18M3 18h18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+      </svg>
+      <span>View List</span>
+    </button>
+
     <!-- 主内容区域 -->
     <div class="main-content">
       <!-- 左侧内容 -->
       <div class="left-content">
-        <!-- Food 区域 -->
+        <!-- Food area -->
         <div class="section">
           <h2 class="section-title">Food</h2>
           <div class="food-grid">
@@ -30,14 +42,7 @@
                 </div>
               </div>
             </div>
-            <div class="food-item empty">
-              <div class="food-image empty-placeholder">
-                <div class="empty-cross">
-                  <div class="line1"></div>
-                  <div class="line2"></div>
-                </div>
-              </div>
-            </div>
+            
           </div>
         </div>
 
@@ -71,40 +76,7 @@
 
     </div>
 
-    <!-- 右下角浮动按钮 -->
-    <div class="floating-actions">
-      <!-- 子按钮 -->
-      <button 
-        class="floating-btn add-btn" 
-        @click="showAddFoodModal = true" 
-        title="Add Food Item"
-        :class="{ 'show': showFloatingMenu }"
-        style="transition-delay: 0.1s"
-      >
-        <span class="add-icon">🍎</span>
-      </button>
-      
-      <button 
-        class="floating-btn list-btn" 
-        @click="showListView = !showListView" 
-        title="View List"
-        :class="{ 'show': showFloatingMenu }"
-        style="transition-delay: 0.2s"
-      >
-        <span class="list-icon">☰</span>
-      </button>
-      
-      <!-- 主按钮 -->
-      <button 
-        class="floating-btn main-btn" 
-        @click="toggleFloatingMenu"
-        title="Menu"
-        :class="{ 'rotated': showFloatingMenu }"
-      >
-        <span class="plus-icon" :class="{ 'rotated': showFloatingMenu }">+</span>
-      </button>
-    </div>
-
+    <!-- List Modal -->
     <div v-if="showListView" class="list-modal-overlay" @click="showListView = false">
       <div class="list-modal" @click.stop>
         <div class="list-header">
@@ -202,7 +174,6 @@ export default {
       showEditFoodModal: false,
       showDonationModal: false,
       showListView: false,
-      showFloatingMenu: false,
       editingItem: null,
       donationItem: null,
       selectedItem: null,
@@ -266,6 +237,13 @@ export default {
   },
   mounted() {
     this.loadInventory()
+    
+    // 检查URL参数，如果有action=add，则自动打开添加食物模态框
+    if (this.$route.query.action === 'add') {
+      this.showAddFoodModal = true
+      // 清除URL参数，避免刷新时重复打开
+      this.$router.replace({ path: '/food-inventory' })
+    }
   },
   methods: {
     async loadInventory() {
@@ -413,10 +391,6 @@ export default {
       
       // 如果没有Unsplash图片，显示占位符
       return 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTUwIiBoZWlnaHQ9IjE1MCIgdmlld0JveD0iMCAwIDE1MCAxNTAiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CjxyZWN0IHdpZHRoPSIxNTAiIGhlaWdodD0iMTUwIiBmaWxsPSIjRjVGNUY1Ii8+CjxwYXRoIGQ9Ik02MCA2MEg5MFY5MEg2MFY2MFoiIGZpbGw9IiNEOUQ5RDkiLz4KPHN2ZyB4PSI2NSIgeT0iNjUiIHdpZHRoPSIyMCIgaGVpZ2h0PSIyMCIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSIjOTk5OTk5Ij4KPHBhdGggZD0iTTEyIDJDMTMuMSAyIDE0IDIuOSAxNCA0VjhIMThWMjBINlY4SDEwVjRDMTAgMi45IDEwLjkgMiAxMiAyWk0xMiA0VjZIMTJWNFpNOCAxMFYxOEgxNlYxMEg4WiIvPgo8L3N2Zz4KPC9zdmc+'
-    },
-    
-    toggleFloatingMenu() {
-      this.showFloatingMenu = !this.showFloatingMenu
     }
   }
 }
@@ -428,6 +402,42 @@ export default {
   background-color: #C8D5B9;
   padding: 40px;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  position: relative;
+}
+
+/* View List Button */
+.view-list-btn {
+  position: fixed;
+  top: 120px;
+  right: 40px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 20px;
+  background: linear-gradient(135deg, #4CAF50, #45a049);
+  color: white;
+  border: none;
+  border-radius: 12px;
+  cursor: pointer;
+  font-size: 1rem;
+  font-weight: 500;
+  box-shadow: 0 4px 12px rgba(76, 175, 80, 0.3);
+  transition: all 0.3s ease;
+  z-index: 100;
+}
+
+.view-list-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(76, 175, 80, 0.4);
+  background: linear-gradient(135deg, #45a049, #3d8b40);
+}
+
+.view-list-btn svg {
+  flex-shrink: 0;
+}
+
+.view-list-btn span {
+  font-weight: 600;
 }
 
 .main-content {
@@ -455,19 +465,19 @@ export default {
 
 .food-grid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 12px;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 10px;
 }
 
 .food-item {
   background: white;
-  border-radius: 12px;
-  padding: 8px;
+  border-radius: 8px;
+  padding: 6px;
   text-align: center;
   cursor: pointer;
   transition: all 0.3s ease;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
-  min-height: 100px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+  aspect-ratio: 1 / 1;
   display: flex;
   flex-direction: column;
   justify-content: center;
@@ -573,9 +583,9 @@ export default {
 }
 
 .food-image {
-  width: 45px;
-  height: 45px;
-  margin-bottom: 8px;
+  width: 80px;
+  height: 80px;
+  margin-bottom: 10px;
   border-radius: 8px;
   overflow: hidden;
   display: flex;
@@ -596,8 +606,8 @@ export default {
 
 .empty-cross {
   position: relative;
-  width: 25px;
-  height: 25px;
+  width: 20px;
+  height: 20px;
 }
 
 .empty-cross .line1,
@@ -609,153 +619,23 @@ export default {
 
 .empty-cross .line1 {
   width: 2px;
-  height: 25px;
-  left: 11.5px;
+  height: 20px;
+  left: 9px;
   top: 0;
 }
 
 .empty-cross .line2 {
-  width: 25px;
+  width: 20px;
   height: 2px;
   left: 0;
-  top: 11.5px;
+  top: 9px;
 }
 
 .food-name {
-  font-size: 0.8rem;
+  font-size: 1rem;
   font-weight: 500;
   color: #333;
   margin: 0;
-}
-
-/* 右下角浮动按钮 */
-.floating-actions {
-  position: fixed;
-  bottom: 30px;
-  right: 30px;
-  z-index: 100;
-}
-
-.floating-btn {
-  width: 60px;
-  height: 60px;
-  border-radius: 50%;
-  border: none;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 1.5rem;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
-  backdrop-filter: blur(10px);
-  position: absolute;
-  bottom: 0;
-  right: 0;
-}
-
-/* 主按钮样式 */
-.floating-btn.main-btn {
-  background: linear-gradient(135deg, #4CAF50, #45a049);
-  color: white;
-  box-shadow: 0 6px 25px rgba(76, 175, 80, 0.4);
-  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-  z-index: 10;
-}
-
-.floating-btn.main-btn:hover {
-  transform: translateY(-3px) scale(1.05);
-  box-shadow: 0 8px 30px rgba(76, 175, 80, 0.5);
-}
-
-.floating-btn.main-btn.rotated {
-  transform: rotate(180deg);
-}
-
-.floating-btn.main-btn.rotated:hover {
-  transform: rotate(180deg) translateY(-3px) scale(1.05);
-}
-
-/* 子按钮样式 */
-.floating-btn.add-btn {
-  background: linear-gradient(135deg, #4CAF50, #45a049);
-  color: white;
-  box-shadow: 0 6px 25px rgba(76, 175, 80, 0.4);
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  opacity: 0;
-  transform: scale(0) translateY(0);
-  pointer-events: none;
-}
-
-.floating-btn.list-btn {
-  background: linear-gradient(135deg, #8BC34A, #7CB342);
-  color: white;
-  box-shadow: 0 6px 25px rgba(139, 195, 74, 0.4);
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  opacity: 0;
-  transform: scale(0) translateY(0);
-  pointer-events: none;
-}
-
-
-/* 展开状态 */
-.floating-btn.show {
-  opacity: 1;
-  transform: scale(1) translateY(0);
-  pointer-events: auto;
-}
-
-.floating-btn.add-btn.show {
-  transform: scale(1) translateY(-80px);
-}
-
-.floating-btn.list-btn.show {
-  transform: scale(1) translateY(-160px);
-}
-
-
-/* 悬停效果 */
-.floating-btn:hover:not(:disabled):not(.main-btn) {
-  transform: scale(1.1) translateY(var(--translate-y, 0));
-  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.3);
-}
-
-.floating-btn.add-btn:hover:not(:disabled) {
-  --translate-y: -80px;
-  box-shadow: 0 8px 30px rgba(76, 175, 80, 0.5);
-}
-
-.floating-btn.list-btn:hover:not(:disabled) {
-  --translate-y: -160px;
-  box-shadow: 0 8px 30px rgba(139, 195, 74, 0.5);
-}
-
-
-/* 图标样式 */
-.plus-icon {
-  font-size: 2rem;
-  line-height: 1;
-  font-weight: 300;
-  transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.plus-icon.rotated {
-  transform: rotate(45deg);
-}
-
-.add-icon {
-  font-size: 1.8rem;
-  line-height: 1;
-  transition: transform 0.3s ease;
-}
-
-.list-icon {
-  font-size: 1.5rem;
-  line-height: 1;
-}
-
-.edit-icon {
-  font-size: 1.3rem;
-  line-height: 1;
 }
 
 /* 列表模态框 */
@@ -905,55 +785,30 @@ export default {
     padding: 20px;
   }
   
+  .view-list-btn {
+    top: 100px;
+    right: 20px;
+    padding: 10px 16px;
+    font-size: 0.9rem;
+  }
+  
+  .view-list-btn svg {
+    width: 20px;
+    height: 20px;
+  }
+  
   .main-content {
     flex-direction: column;
     gap: 30px;
   }
   
   .food-grid {
-    grid-template-columns: repeat(3, 1fr);
-    gap: 10px;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 8px;
   }
   
   .section-title {
     font-size: 2rem;
-  }
-  
-  .floating-actions {
-    bottom: 20px;
-    right: 20px;
-  }
-  
-  .floating-btn {
-    width: 50px;
-    height: 50px;
-    font-size: 1.2rem;
-  }
-  
-  .floating-btn.add-btn.show {
-    transform: scale(1) translateY(-70px);
-  }
-  
-  .floating-btn.list-btn.show {
-    transform: scale(1) translateY(-140px);
-  }
-  
-  
-  .floating-btn.add-btn:hover:not(:disabled) {
-    --translate-y: -70px;
-  }
-  
-  .floating-btn.list-btn:hover:not(:disabled) {
-    --translate-y: -140px;
-  }
-  
-  
-  .plus-icon {
-    font-size: 1.5rem;
-  }
-  
-  .add-icon {
-    font-size: 1.4rem;
   }
   
   .list-stats {
@@ -963,44 +818,20 @@ export default {
 }
 
 @media (max-width: 480px) {
-  .food-grid {
-    grid-template-columns: repeat(2, 1fr);
-    gap: 8px;
-  }
-  
-  .floating-actions {
-    bottom: 15px;
+  .view-list-btn {
+    top: 90px;
     right: 15px;
+    padding: 8px 12px;
+    font-size: 0.85rem;
   }
   
-  .floating-btn {
-    width: 45px;
-    height: 45px;
-    font-size: 1rem;
+  .view-list-btn span {
+    display: none;
   }
   
-  .floating-btn.add-btn.show {
-    transform: scale(1) translateY(-60px);
-  }
-  
-  .floating-btn.list-btn.show {
-    transform: scale(1) translateY(-120px);
-  }
-  
-  .floating-btn.add-btn:hover:not(:disabled) {
-    --translate-y: -60px;
-  }
-  
-  .floating-btn.list-btn:hover:not(:disabled) {
-    --translate-y: -120px;
-  }
-  
-  .plus-icon {
-    font-size: 1.3rem;
-  }
-  
-  .add-icon {
-    font-size: 1.2rem;
+  .food-grid {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 6px;
   }
 }
 </style>
