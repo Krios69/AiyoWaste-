@@ -1,16 +1,29 @@
 <template>
   <div class="food-inventory-page">
-    <!-- View List Button -->
-    <button 
-      class="view-list-btn" 
-      @click="showListView = !showListView"
-      title="View List"
-    >
-      <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-        <path d="M3 12h18M3 6h18M3 18h18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-      </svg>
-      <span>View List</span>
-    </button>
+    <!-- Action Buttons -->
+    <div class="action-buttons">
+      <button 
+        class="view-list-btn" 
+        @click="showListView = !showListView"
+        title="View List"
+      >
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+          <path d="M3 12h18M3 6h18M3 18h18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+        </svg>
+        <span>View List</span>
+      </button>
+
+      <button 
+        class="view-donations-btn" 
+        @click="showDonationsView = !showDonationsView"
+        title="View Donations"
+      >
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+          <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        <span>Donations</span>
+      </button>
+    </div>
 
     <!-- 主内容区域 -->
     <div class="main-content">
@@ -76,6 +89,48 @@
 
     </div>
 
+    <!-- Donations Modal -->
+    <div v-if="showDonationsView" class="donations-modal-overlay" @click="showDonationsView = false">
+      <div class="donations-modal" @click.stop>
+        <div class="donations-header">
+          <h3>Items Marked for Donation</h3>
+          <button @click="showDonationsView = false" class="close-btn">✕</button>
+        </div>
+        <div class="donations-content">
+          <div class="donations-stats">
+            <div class="stat-item">
+              <span class="stat-number">{{ donationItems }}</span>
+              <span class="stat-label">Total Donations</span>
+            </div>
+          </div>
+          
+          <div class="donations-items" v-if="donationItemsList.length > 0">
+            <div v-for="item in donationItemsList" :key="item._id" class="donation-item">
+              <div class="item-image">
+                <img :src="getFoodImage(item)" :alt="item.name" />
+              </div>
+              <div class="item-info">
+                <div class="item-name">{{ item.name }}</div>
+                <div class="item-details">{{ item.quantity }} - {{ formatDate(item.expiryDate) }}</div>
+                <div class="item-status">Marked for donation</div>
+              </div>
+              <div class="item-actions">
+                <button @click="editItem(item)" class="mini-btn" title="Edit">Edit</button>
+                <button @click="removeFromDonation(item)" class="mini-btn remove" title="Remove from donation">Remove</button>
+                <button @click="deleteItem(item._id)" class="mini-btn delete" title="Delete">Delete</button>
+              </div>
+            </div>
+          </div>
+          
+          <div class="empty-donations" v-else>
+            <div class="empty-icon">Gift</div>
+            <h4>No items marked for donation</h4>
+            <p>Items marked for donation will appear here</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- List Modal -->
     <div v-if="showListView" class="list-modal-overlay" @click="showListView = false">
       <div class="list-modal" @click.stop>
@@ -93,10 +148,6 @@
               <span class="stat-number">{{ expiringItems }}</span>
               <span class="stat-label">Expiring Soon</span>
             </div>
-            <div class="stat-item">
-              <span class="stat-number">{{ donationItems }}</span>
-              <span class="stat-label">For Donation</span>
-            </div>
           </div>
           
           <div class="list-items">
@@ -108,13 +159,6 @@
               <div class="item-actions">
                 <button @click="editItem(item)" class="mini-btn">✏️</button>
                 <button @click="deleteItem(item._id)" class="mini-btn">🗑️</button>
-                <button 
-                  v-if="!item.forDonation && isExpiringSoon(item.expiryDate)"
-                  @click="markForDonation(item)"
-                  class="mini-btn donate"
-                >
-                  ❤️
-                </button>
               </div>
             </div>
           </div>
@@ -174,6 +218,7 @@ export default {
       showEditFoodModal: false,
       showDonationModal: false,
       showListView: false,
+      showDonationsView: false,
       editingItem: null,
       donationItem: null,
       selectedItem: null,
@@ -233,6 +278,10 @@ export default {
       return this.foodItems.filter(item => 
         this.isExpiringSoon(item.expiryDate) && !this.isExpired(item.expiryDate)
       ).slice(0, 3)
+    },
+    donationItemsList() {
+      // 捐赠列表：显示所有标记为捐赠的食物
+      return this.foodItems.filter(item => item.forDonation)
     }
   },
   mounted() {
@@ -391,6 +440,37 @@ export default {
       
       // 如果没有Unsplash图片，显示占位符
       return 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTUwIiBoZWlnaHQ9IjE1MCIgdmlld0JveD0iMCAwIDE1MCAxNTAiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CjxyZWN0IHdpZHRoPSIxNTAiIGhlaWdodD0iMTUwIiBmaWxsPSIjRjVGNUY1Ii8+CjxwYXRoIGQ9Ik02MCA2MEg5MFY5MEg2MFY2MFoiIGZpbGw9IiNEOUQ5RDkiLz4KPHN2ZyB4PSI2NSIgeT0iNjUiIHdpZHRoPSIyMCIgaGVpZ2h0PSIyMCIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSIjOTk5OTk5Ij4KPHBhdGggZD0iTTEyIDJDMTMuMSAyIDE0IDIuOSAxNCA0VjhIMThWMjBINlY4SDEwVjRDMTAgMi45IDEwLjkgMiAxMiAyWk0xMiA0VjZIMTJWNFpNOCAxMFYxOEgxNlYxMEg4WiIvPgo8L3N2Zz4KPC9zdmc+'
+    },
+    
+    async removeFromDonation(item) {
+      if (!confirm('Are you sure you want to remove this item from donation?')) {
+        return
+      }
+      
+      try {
+        const response = await fetch(`http://localhost:3001/api/food-inventory/${item._id}`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-user-id': user.value.id
+          },
+          body: JSON.stringify({
+            ...item,
+            forDonation: false
+          })
+        })
+        const result = await response.json()
+        
+        if (result.success) {
+          alert('Item removed from donation successfully!')
+          this.loadInventory()
+        } else {
+          alert('Failed to remove item from donation: ' + result.message)
+        }
+      } catch (error) {
+        console.error('Error removing item from donation:', error)
+        alert('Failed to remove item from donation. Please try again.')
+      }
     }
   }
 }
@@ -405,11 +485,19 @@ export default {
   position: relative;
 }
 
-/* View List Button */
-.view-list-btn {
+/* Action Buttons */
+.action-buttons {
   position: fixed;
   top: 120px;
   right: 40px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  z-index: 100;
+}
+
+.view-list-btn,
+.view-donations-btn {
   display: flex;
   align-items: center;
   gap: 10px;
@@ -423,7 +511,11 @@ export default {
   font-weight: 500;
   box-shadow: 0 4px 12px rgba(76, 175, 80, 0.3);
   transition: all 0.3s ease;
-  z-index: 100;
+}
+
+.view-donations-btn {
+  background: linear-gradient(135deg, #FF6B6B, #ff5252);
+  box-shadow: 0 4px 12px rgba(255, 107, 107, 0.3);
 }
 
 .view-list-btn:hover {
@@ -432,11 +524,19 @@ export default {
   background: linear-gradient(135deg, #45a049, #3d8b40);
 }
 
-.view-list-btn svg {
+.view-donations-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(255, 107, 107, 0.4);
+  background: linear-gradient(135deg, #ff5252, #e53935);
+}
+
+.view-list-btn svg,
+.view-donations-btn svg {
   flex-shrink: 0;
 }
 
-.view-list-btn span {
+.view-list-btn span,
+.view-donations-btn span {
   font-weight: 600;
 }
 
@@ -638,6 +738,201 @@ export default {
   margin: 0;
 }
 
+/* 捐赠模态框 */
+.donations-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.donations-modal {
+  background: white;
+  border-radius: 20px;
+  width: 90%;
+  max-width: 900px;
+  max-height: 80vh;
+  overflow: hidden;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
+}
+
+.donations-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px 30px;
+  border-bottom: 1px solid #eee;
+  background: linear-gradient(135deg, #FF6B6B, #ff5252);
+  color: white;
+}
+
+.donations-header h3 {
+  margin: 0;
+  font-size: 1.5rem;
+}
+
+.donations-content {
+  padding: 30px;
+  max-height: 60vh;
+  overflow-y: auto;
+}
+
+.donations-stats {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 30px;
+}
+
+.donations-stats .stat-item {
+  text-align: center;
+  padding: 20px;
+  background: #fff5f5;
+  border-radius: 10px;
+}
+
+.donations-stats .stat-number {
+  font-size: 2rem;
+  font-weight: bold;
+  color: #FF6B6B;
+  display: block;
+}
+
+.donations-stats .stat-label {
+  color: #666;
+  font-size: 0.9rem;
+  margin-top: 5px;
+}
+
+.donations-items {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+}
+
+.donation-item {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  padding: 20px;
+  background: #fff5f5;
+  border-radius: 15px;
+  transition: all 0.3s ease;
+}
+
+.donation-item:hover {
+  background: #ffe6e6;
+  transform: translateY(-2px);
+  box-shadow: 0 8px 25px rgba(255, 107, 107, 0.2);
+}
+
+.item-image {
+  width: 60px;
+  height: 60px;
+  border-radius: 10px;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.item-image img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.item-info {
+  flex: 1;
+}
+
+.item-name {
+  font-weight: 600;
+  color: #333;
+  margin-bottom: 5px;
+  font-size: 1.1rem;
+}
+
+.item-details {
+  color: #666;
+  font-size: 0.9rem;
+  margin-bottom: 5px;
+}
+
+.item-status {
+  color: #FF6B6B;
+  font-size: 0.85rem;
+  font-weight: 500;
+}
+
+.item-actions {
+  display: flex;
+  gap: 10px;
+}
+
+.item-actions .mini-btn {
+  background: none;
+  border: 1px solid #ddd;
+  padding: 6px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  font-size: 0.85rem;
+  font-weight: 500;
+}
+
+.item-actions .mini-btn:hover {
+  background: #f0f0f0;
+  transform: scale(1.05);
+}
+
+.item-actions .mini-btn.remove {
+  color: #FF6B6B;
+  border-color: #FF6B6B;
+}
+
+.item-actions .mini-btn.remove:hover {
+  background: #ffe6e6;
+  border-color: #ff5252;
+}
+
+.item-actions .mini-btn.delete {
+  color: #e74c3c;
+  border-color: #e74c3c;
+}
+
+.item-actions .mini-btn.delete:hover {
+  background: #ffe6e6;
+  border-color: #c0392b;
+}
+
+.empty-donations {
+  text-align: center;
+  padding: 60px 20px;
+  color: #666;
+}
+
+.empty-donations .empty-icon {
+  font-size: 2rem;
+  margin-bottom: 20px;
+  font-weight: bold;
+  color: #FF6B6B;
+}
+
+.empty-donations h4 {
+  margin: 0 0 10px 0;
+  font-size: 1.3rem;
+  color: #333;
+}
+
+.empty-donations p {
+  margin: 0;
+  font-size: 1rem;
+}
+
 /* 列表模态框 */
 .list-modal-overlay {
   position: fixed;
@@ -697,9 +992,12 @@ export default {
 
 .list-stats {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(2, 1fr);
   gap: 20px;
   margin-bottom: 30px;
+  max-width: 600px;
+  margin-left: auto;
+  margin-right: auto;
 }
 
 .stat-item {
@@ -775,24 +1073,26 @@ export default {
   background: #dee2e6;
 }
 
-.mini-btn.donate {
-  color: #e74c3c;
-}
-
 /* 响应式设计 */
 @media (max-width: 768px) {
   .food-inventory-page {
     padding: 20px;
   }
   
-  .view-list-btn {
+  .action-buttons {
     top: 100px;
     right: 20px;
+    gap: 10px;
+  }
+  
+  .view-list-btn,
+  .view-donations-btn {
     padding: 10px 16px;
     font-size: 0.9rem;
   }
   
-  .view-list-btn svg {
+  .view-list-btn svg,
+  .view-donations-btn svg {
     width: 20px;
     height: 20px;
   }
@@ -811,27 +1111,75 @@ export default {
     font-size: 2rem;
   }
   
+  .donations-modal {
+    width: 95%;
+    max-width: none;
+  }
+  
+  .donations-content {
+    padding: 20px;
+  }
+  
+  .donation-item {
+    flex-direction: column;
+    text-align: center;
+    gap: 15px;
+  }
+  
+  .item-image {
+    width: 80px;
+    height: 80px;
+  }
+  
+  .item-actions {
+    justify-content: center;
+  }
+  
   .list-stats {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(2, 1fr);
     gap: 15px;
   }
 }
 
 @media (max-width: 480px) {
-  .view-list-btn {
+  .action-buttons {
     top: 90px;
     right: 15px;
+    gap: 8px;
+  }
+  
+  .view-list-btn,
+  .view-donations-btn {
     padding: 8px 12px;
     font-size: 0.85rem;
   }
   
-  .view-list-btn span {
+  .view-list-btn span,
+  .view-donations-btn span {
     display: none;
   }
   
   .food-grid {
     grid-template-columns: repeat(3, 1fr);
     gap: 6px;
+  }
+  
+  .donations-modal {
+    width: 98%;
+    margin: 10px;
+  }
+  
+  .donations-content {
+    padding: 15px;
+  }
+  
+  .donation-item {
+    padding: 15px;
+  }
+  
+  .item-image {
+    width: 60px;
+    height: 60px;
   }
 }
 </style>
