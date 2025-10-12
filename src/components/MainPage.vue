@@ -19,6 +19,25 @@
             <h2>Quick Add Food</h2>
             <p>Add a new food item to your inventory</p>
           </div>
+          <div class="btn-image">
+            <img src="../img/food.PNG" alt="Food" />
+          </div>
+        </button>
+        
+        <!-- Browse Food Button -->
+        <button class="browse-food-btn" @click="goToBrowseFood">
+          <div class="btn-icon">
+            <svg viewBox="0 0 24 24" fill="none">
+              <path d="M21 21L16.65 16.65M19 11C19 15.4183 15.4183 19 11 19C6.58172 19 3 15.4183 3 11C3 6.58172 6.58172 3 11 3C15.4183 3 19 6.58172 19 11Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </div>
+          <div class="btn-content">
+            <h2>Browse Food</h2>
+            <p>Browse available food items and donations</p>
+          </div>
+          <div class="btn-image">
+            <img src="../img/food.PNG" alt="Browse Food" />
+          </div>
         </button>
       </div>
     </div>
@@ -31,6 +50,9 @@ export default {
   methods: {
     goToAddFood() {
       this.$router.push({ path: '/food-inventory', query: { action: 'add' } })
+    },
+    goToBrowseFood() {
+      this.$router.push({ path: '/browse-food' })
     }
   }
 }
@@ -47,7 +69,7 @@ export default {
 }
 
 .page-content {
-  max-width: 900px;
+  max-width: 1200px;
   margin: 0 auto;
   width: 100%;
 }
@@ -55,6 +77,7 @@ export default {
 .welcome-section {
   text-align: center;
   margin-bottom: 60px;
+  margin-top: -100px;
 }
 
 .welcome-section h1 {
@@ -76,6 +99,7 @@ export default {
   display: flex;
   justify-content: center;
   align-items: center;
+  gap: 30px;
 }
 
 /* Quick Add Button */
@@ -91,7 +115,7 @@ export default {
   cursor: pointer;
   transition: all 0.3s ease;
   width: 100%;
-  max-width: 550px;
+  max-width: 520px;
 }
 
 .quick-add-btn:hover {
@@ -142,6 +166,62 @@ export default {
   transition: color 0.3s ease;
 }
 
+.btn-image {
+  flex-shrink: 0;
+  width: 150px;
+  height: 150px;
+  border-radius: 12px;
+  overflow: hidden;
+  transition: all 0.3s ease;
+}
+
+.btn-image img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 12px;
+}
+
+.quick-add-btn:hover .btn-image {
+  transform: scale(1.05);
+}
+
+/* Browse Food Button */
+.browse-food-btn {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  background: white;
+  border: none;
+  padding: 25px 30px;
+  border-radius: 16px;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.08);
+  cursor: pointer;
+  transition: all 0.3s ease;
+  width: 100%;
+  max-width: 520px;
+}
+
+.browse-food-btn:hover {
+  transform: translateY(-6px);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.12);
+  background: linear-gradient(135deg, #4A90E2 0%, #357ABD 100%);
+}
+
+.browse-food-btn:hover .btn-icon {
+  transform: scale(1.1);
+  color: white;
+}
+
+.browse-food-btn:hover .btn-content h2,
+.browse-food-btn:hover .btn-content p {
+  color: white;
+}
+
+.browse-food-btn:hover .btn-image {
+  transform: scale(1.05);
+}
+
 /* Responsive Design */
 @media (max-width: 768px) {
   .main-page {
@@ -160,10 +240,17 @@ export default {
     font-size: 1rem;
   }
   
-  .quick-add-btn {
+  .quick-actions {
+    flex-direction: column;
+    gap: 20px;
+  }
+  
+  .quick-add-btn,
+  .browse-food-btn {
     flex-direction: column;
     padding: 20px;
     gap: 15px;
+    max-width: none;
   }
   
   .btn-icon svg {
@@ -181,6 +268,11 @@ export default {
   
   .btn-content p {
     font-size: 0.8rem;
+  }
+  
+  .btn-image {
+    width: 70px;
+    height: 70px;
   }
 }
 </style>
