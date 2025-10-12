@@ -104,24 +104,76 @@
             </div>
           </div>
           
-          <div class="donations-items" v-if="donationItemsList.length > 0">
-            <div v-for="item in donationItemsList" :key="item._id" class="donation-item">
-              <div class="item-image">
-                <img :src="getFoodImage(item)" :alt="item.name" />
+          <div class="donation-list" v-if="donationItemsList.length > 0">
+            <div v-for="item in donationItemsList" :key="item._id" class="donation-card">
+              <!-- 卡片头部 -->
+              <div class="card-header">
+                <div class="header-content">
+                  <div class="item-image">
+                    <img :src="getFoodImage(item)" :alt="item.name" />
+                  </div>
+                  <div class="header-text">
+                    <h4 class="item-title">{{ item.name }}</h4>
+                  </div>
+                </div>
               </div>
-              <div class="item-info">
-                <div class="item-name">{{ item.name }}</div>
-                <div class="item-details">{{ item.quantity }} - {{ formatDate(item.expiryDate) }}</div>
-                <div class="item-status">Marked for donation</div>
+              
+              <!-- 卡片内容 -->
+              <div class="card-content">
+                <div class="info-row">
+                  <span class="info-label">Quantity:</span>
+                  <span class="info-value">{{ item.quantity }}</span>
+                </div>
+                
+                <div class="info-row">
+                  <span class="info-label">Expiry:</span>
+                  <span class="info-value">{{ formatDate(item.expiryDate) }} ({{ getDaysUntilExpiry(item.expiryDate) }})</span>
+                </div>
+                
+                <div class="info-row">
+                  <span class="info-label">Category:</span>
+                  <span class="info-value">{{ item.category }}</span>
+                </div>
+                
+                <div class="info-row">
+                  <span class="info-label">Storage:</span>
+                  <span class="info-value">{{ item.location || 'Not specified' }}</span>
+                </div>
+                
+                <div class="info-row" v-if="item.donationInfo">
+                  <span class="info-label">Pickup:</span>
+                  <span class="info-value">{{ item.donationInfo.pickupLocation || 'Not specified' }}</span>
+                </div>
+                
+                <div class="info-row" v-if="item.donationInfo">
+                  <span class="info-label">Available:</span>
+                  <span class="info-value">{{ item.donationInfo.availableTime || 'Not specified' }}</span>
+                </div>
+                
+                <div class="info-row" v-if="item.donationInfo">
+                  <span class="info-label">Contact:</span>
+                  <span class="info-value">{{ item.donationInfo.contact || 'Not specified' }}</span>
+                </div>
               </div>
-              <div class="item-actions">
-                <button @click="editItem(item)" class="mini-btn" title="Edit">Edit</button>
-                <button @click="removeFromDonation(item)" class="mini-btn remove" title="Remove from donation">Remove</button>
-                <button @click="deleteItem(item._id)" class="mini-btn delete" title="Delete">Delete</button>
+              
+              <!-- 卡片操作按钮 -->
+              <div class="card-actions">
+                <button @click="editDonationInfo(item)" class="action-btn edit-btn" title="Edit Donation Info">
+                  <span class="btn-icon">✏️</span>
+                  <span class="btn-text">Edit</span>
+                </button>
+                <button @click="removeFromDonation(item)" class="action-btn remove-btn" title="Remove from donation">
+                  <span class="btn-icon">↩️</span>
+                  <span class="btn-text">Remove</span>
+                </button>
+                <button @click="deleteItem(item._id)" class="action-btn delete-btn" title="Delete">
+                  <span class="btn-icon">🗑️</span>
+                  <span class="btn-text">Delete</span>
+                </button>
               </div>
             </div>
-          </div>
-          
+    </div>
+
           <div class="empty-donations" v-else>
             <div class="empty-icon">Gift</div>
             <h4>No items marked for donation</h4>
@@ -227,26 +279,35 @@ export default {
   },
   computed: {
     totalItems() {
-      return this.foodItems.length
+      // 只计算个人库存物品（排除捐赠物品）
+      return this.foodItems.filter(item => !item.forDonation).length
     },
     expiringItems() {
+      // 只计算个人库存中即将过期的物品
       return this.foodItems.filter(item => 
-        this.isExpiringSoon(item.expiryDate) && !item.forDonation
+        !item.forDonation && 
+        this.isExpiringSoon(item.expiryDate) && 
+        !this.isExpired(item.expiryDate)
       ).length
     },
     donationItems() {
       return this.foodItems.filter(item => item.forDonation).length
     },
     uniqueCategories() {
-      const categories = new Set(this.foodItems.map(item => item.category))
+      // 只计算个人库存物品的类别数量
+      const inventoryItems = this.foodItems.filter(item => !item.forDonation)
+      const categories = new Set(inventoryItems.map(item => item.category))
       return categories.size
     },
     availableCategories() {
-      const categories = [...new Set(this.foodItems.map(item => item.category))]
+      // 只显示个人库存物品的类别
+      const inventoryItems = this.foodItems.filter(item => !item.forDonation)
+      const categories = [...new Set(inventoryItems.map(item => item.category))]
       return categories.sort()
     },
     filteredItems() {
-      let filtered = this.foodItems
+      // 只显示个人库存物品（排除捐赠物品）
+      let filtered = this.foodItems.filter(item => !item.forDonation)
       
       // 搜索过滤
       if (this.searchQuery) {
@@ -270,14 +331,16 @@ export default {
       return filtered.sort((a, b) => new Date(a.expiryDate) - new Date(b.expiryDate))
     },
     regularItems() {
-      // Food列表：显示所有未过期的食物（排除已过期的）
-      return this.foodItems.filter(item => !this.isExpired(item.expiryDate)).slice(0, 4)
+      // Food列表：显示所有个人库存物品（排除捐赠物品，包含过期物品）
+      return this.foodItems.filter(item => !item.forDonation)
     },
     expiringItemsList() {
-      // Expiry列表：只显示即将过期的食物（2天内过期且未过期）
+      // Expiry列表：只显示个人库存中即将过期的食物（2天内过期且未过期，排除捐赠物品）
       return this.foodItems.filter(item => 
-        this.isExpiringSoon(item.expiryDate) && !this.isExpired(item.expiryDate)
-      ).slice(0, 3)
+        !item.forDonation && 
+        this.isExpiringSoon(item.expiryDate) && 
+        !this.isExpired(item.expiryDate)
+      )
     },
     donationItemsList() {
       // 捐赠列表：显示所有标记为捐赠的食物
@@ -373,6 +436,11 @@ export default {
       this.showEditFoodModal = true
     },
     
+    editDonationInfo(item) {
+      this.donationItem = item
+      this.showDonationModal = true
+    },
+    
     async deleteItem(itemId) {
       if (!confirm('Are you sure you want to delete this food item?')) {
         return
@@ -442,12 +510,15 @@ export default {
       return 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTUwIiBoZWlnaHQ9IjE1MCIgdmlld0JveD0iMCAwIDE1MCAxNTAiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CjxyZWN0IHdpZHRoPSIxNTAiIGhlaWdodD0iMTUwIiBmaWxsPSIjRjVGNUY1Ii8+CjxwYXRoIGQ9Ik02MCA2MEg5MFY5MEg2MFY2MFoiIGZpbGw9IiNEOUQ5RDkiLz4KPHN2ZyB4PSI2NSIgeT0iNjUiIHdpZHRoPSIyMCIgaGVpZ2h0PSIyMCIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSIjOTk5OTk5Ij4KPHBhdGggZD0iTTEyIDJDMTMuMSAyIDE0IDIuOSAxNCA0VjhIMThWMjBINlY4SDEwVjRDMTAgMi45IDEwLjkgMiAxMiAyWk0xMiA0VjZIMTJWNFpNOCAxMFYxOEgxNlYxMEg4WiIvPgo8L3N2Zz4KPC9zdmc+'
     },
     
+    
     async removeFromDonation(item) {
       if (!confirm('Are you sure you want to remove this item from donation?')) {
         return
       }
       
       try {
+        console.log('🔄 移除捐赠标记:', item)
+        
         const response = await fetch(`http://localhost:3001/api/food-inventory/${item._id}`, {
           method: 'PUT',
           headers: {
@@ -455,20 +526,35 @@ export default {
             'x-user-id': user.value.id
           },
           body: JSON.stringify({
-            ...item,
+            name: item.name,
+            quantity: item.quantity,
+            expiryDate: item.expiryDate,
+            category: item.category,
+            location: item.location,
+            notes: item.notes,
+            imagePath: item.imagePath,
             forDonation: false
+            // 注意：不发送donationInfo字段，让服务器处理
           })
         })
+        
+        console.log('📡 API响应状态:', response.status)
+        
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`)
+        }
+        
         const result = await response.json()
+        console.log('📡 API响应结果:', result)
         
         if (result.success) {
           alert('Item removed from donation successfully!')
           this.loadInventory()
         } else {
-          alert('Failed to remove item from donation: ' + result.message)
+          alert('Failed to remove item from donation: ' + (result.message || 'Unknown error'))
         }
       } catch (error) {
-        console.error('Error removing item from donation:', error)
+        console.error('❌ 移除捐赠标记错误:', error)
         alert('Failed to remove item from donation. Please try again.')
       }
     }
@@ -815,28 +901,55 @@ export default {
   gap: 15px;
 }
 
-.donation-item {
-  display: flex;
-  align-items: center;
-  gap: 20px;
-  padding: 20px;
-  background: #fff5f5;
-  border-radius: 15px;
-  transition: all 0.3s ease;
+/* 捐赠列表样式 */
+.donation-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 1.5rem;
 }
 
-.donation-item:hover {
-  background: #ffe6e6;
+/* 捐赠卡片样式 */
+.donation-card {
+  background: white;
+  border-radius: 15px;
+  padding: 20px;
+  margin-bottom: 20px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.donation-card:hover {
   transform: translateY(-2px);
-  box-shadow: 0 8px 25px rgba(255, 107, 107, 0.2);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.15);
+}
+
+/* 卡片头部 */
+.card-header {
+  margin-bottom: 15px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.header-content {
+  display: flex;
+  gap: 15px;
+  align-items: flex-start;
+}
+
+.header-text {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
 .item-image {
-  width: 60px;
-  height: 60px;
-  border-radius: 10px;
+  width: 80px;
+  height: 80px;
+  border-radius: 12px;
   overflow: hidden;
   flex-shrink: 0;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
 
 .item-image img {
@@ -845,68 +958,136 @@ export default {
   object-fit: cover;
 }
 
-.item-info {
-  flex: 1;
-}
-
-.item-name {
-  font-weight: 600;
+.item-title {
+  margin: 0;
+  font-size: 1.4rem;
+  font-weight: 700;
   color: #333;
-  margin-bottom: 5px;
-  font-size: 1.1rem;
 }
 
-.item-details {
-  color: #666;
+.donation-badge {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: linear-gradient(135deg, #FFD700, #FFA500);
+  color: white;
+  padding: 6px 12px;
+  border-radius: 20px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  box-shadow: 0 2px 6px rgba(255, 215, 0, 0.3);
+}
+
+.gift-icon {
   font-size: 0.9rem;
-  margin-bottom: 5px;
 }
 
-.item-status {
-  color: #FF6B6B;
-  font-size: 0.85rem;
-  font-weight: 500;
+.badge-text {
+  white-space: nowrap;
 }
 
-.item-actions {
+/* 卡片内容 */
+.card-content {
+  margin-bottom: 20px;
+}
+
+.info-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+  padding: 5px 0;
+}
+
+.info-label {
+  font-weight: 600;
+  color: #555;
+  font-size: 0.9rem;
+  min-width: 140px;
+}
+
+.info-value {
+  color: #333;
+  font-size: 0.9rem;
+  text-align: right;
+  flex: 1;
+  margin-left: 10px;
+}
+
+/* 卡片操作按钮 */
+.card-actions {
   display: flex;
   gap: 10px;
+  flex-wrap: wrap;
 }
 
-.item-actions .mini-btn {
-  background: none;
-  border: 1px solid #ddd;
-  padding: 6px 12px;
-  border-radius: 6px;
+.action-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  border: none;
+  border-radius: 8px;
   cursor: pointer;
-  transition: all 0.3s ease;
   font-size: 0.85rem;
   font-weight: 500;
+  transition: all 0.2s ease;
+  min-width: 80px;
+  justify-content: center;
 }
 
-.item-actions .mini-btn:hover {
-  background: #f0f0f0;
-  transform: scale(1.05);
+.btn-icon {
+  font-size: 1rem;
 }
 
-.item-actions .mini-btn.remove {
-  color: #FF6B6B;
-  border-color: #FF6B6B;
+.btn-text {
+  font-size: 0.8rem;
 }
 
-.item-actions .mini-btn.remove:hover {
-  background: #ffe6e6;
-  border-color: #ff5252;
+/* 按钮颜色 */
+.view-btn {
+  background: #e3f2fd;
+  color: #1976d2;
+  border: 1px solid #bbdefb;
 }
 
-.item-actions .mini-btn.delete {
-  color: #e74c3c;
-  border-color: #e74c3c;
+.view-btn:hover {
+  background: #bbdefb;
+  transform: translateY(-1px);
 }
 
-.item-actions .mini-btn.delete:hover {
-  background: #ffe6e6;
-  border-color: #c0392b;
+.edit-btn {
+  background: #fff3e0;
+  color: #f57c00;
+  border: 1px solid #ffcc02;
+}
+
+.edit-btn:hover {
+  background: #ffcc02;
+  color: white;
+  transform: translateY(-1px);
+}
+
+.remove-btn {
+  background: #ffebee;
+  color: #d32f2f;
+  border: 1px solid #ffcdd2;
+}
+
+.remove-btn:hover {
+  background: #ffcdd2;
+  transform: translateY(-1px);
+}
+
+.delete-btn {
+  background: #fce4ec;
+  color: #c2185b;
+  border: 1px solid #f8bbd9;
+}
+
+.delete-btn:hover {
+  background: #f8bbd9;
+  transform: translateY(-1px);
 }
 
 .empty-donations {
@@ -1120,19 +1301,48 @@ export default {
     padding: 20px;
   }
   
-  .donation-item {
+  .donation-list {
+    grid-template-columns: 1fr;
+    gap: 1rem;
+  }
+  
+  .header-content {
     flex-direction: column;
     text-align: center;
-    gap: 15px;
+    gap: 10px;
   }
   
   .item-image {
-    width: 80px;
-    height: 80px;
+    width: 100px;
+    height: 100px;
+    align-self: center;
   }
   
-  .item-actions {
+  .card-actions {
+    flex-direction: column;
+  }
+  
+  .action-btn {
+    width: 100%;
     justify-content: center;
+  }
+  
+  .info-label {
+    min-width: 120px;
+    font-size: 0.85rem;
+  }
+  
+  .info-value {
+    font-size: 0.85rem;
+  }
+  
+  .item-title {
+    font-size: 1.2rem;
+  }
+  
+  .donation-badge {
+    font-size: 0.75rem;
+    padding: 4px 8px;
   }
   
   .list-stats {
