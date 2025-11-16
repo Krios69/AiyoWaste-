@@ -5,8 +5,12 @@ import path from 'path';
 import { generateVerificationCode, sendVerificationCode, sendActivationEmail } from './src/services/emailService.js';
 import { connectToDatabase, UserService, VerificationService, getDatabase } from './src/database/mongodb.js';
 import { FoodInventoryService, DonationService } from './src/database/foodService.js';
+import { AnalyticsService } from './src/database/analyticsService.js';
 import unsplashImageService from './src/services/unsplashImageService.js';
 import { ObjectId } from 'mongodb';
+import { NotificationService } from './src/database/notificationService.js';
+import { MealPlanService } from './src/database/mealPlanService.js';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 
 // 加载环境变量
 dotenv.config();
@@ -22,7 +26,21 @@ app.use(express.json());
 app.use('/generated-images', express.static(path.join(process.cwd(), 'public', 'generated-images')));
 
 // 初始化数据库连接
-let userService, verificationService, foodInventoryService, donationService;
+let userService, verificationService, foodInventoryService, donationService, analyticsService, notificationService, mealPlanService;
+
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY || 'AIzaSyAqRjNksBoeAtUht_ab31qDvhwOfk4gBiE';
+let geminiClient = null;
+
+if (GEMINI_API_KEY) {
+  try {
+    geminiClient = new GoogleGenerativeAI(GEMINI_API_KEY);
+    console.log('✅ Gemini client initialized');
+  } catch (error) {
+    console.error('❌ Failed to initialize Gemini client:', error);
+  }
+} else {
+  console.warn('⚠️ GEMINI_API_KEY not set. AI recipe suggestions will use fallback data.');
+}
 
 async function initializeDatabase() {
   try {
@@ -31,6 +49,9 @@ async function initializeDatabase() {
     verificationService = new VerificationService();
     foodInventoryService = new FoodInventoryService();
     donationService = new DonationService();
+    analyticsService = new AnalyticsService();
+    notificationService = new NotificationService();
+    mealPlanService = new MealPlanService();
     console.log('✅ 数据库服务初始化完成');
   } catch (error) {
     console.error('❌ 数据库初始化失败:', error);
@@ -40,6 +61,152 @@ async function initializeDatabase() {
 
 // 启动时初始化数据库
 initializeDatabase();
+
+function calculateReservationsFromPlan(plan = {}) {
+  const reservations = {};
+  for (const dayData of Object.values(plan || {})) {
+    const meals = dayData?.meals || {};
+    for (const meal of Object.values(meals)) {
+      if (meal && meal.type === 'inventory' && meal.itemId) {
+        const quantity = Number(meal.quantity) || 0;
+        if (quantity > 0) {
+          if (!reservations[meal.itemId]) {
+            reservations[meal.itemId] = 0;
+          }
+          reservations[meal.itemId] += quantity;
+        }
+      }
+    }
+  }
+  return reservations;
+}
+
+function getWeekStartISO(dateInput = new Date()) {
+  const date = new Date(dateInput);
+  const day = date.getDay();
+  const diff = day === 0 ? -6 : 1 - day;
+  date.setDate(date.getDate() + diff);
+  date.setHours(0, 0, 0, 0);
+  return date.toISOString().split('T')[0];
+}
+
+const FALLBACK_RECIPES = [
+  {
+    title: 'Hearty Vegetable Stir-Fry',
+    description: 'Quick stir-fry that uses mixed vegetables and pantry staples for a balanced dinner.',
+    focusItems: ['mixed vegetables', 'garlic', 'rice'],
+    ingredients: [
+      '2 cups mixed vegetables (broccoli, carrots, peppers)',
+      '2 cloves garlic, minced',
+      '1 tbsp soy sauce',
+      '1 tsp sesame oil',
+      '1 cup cooked rice'
+    ],
+    steps: [
+      'Heat a pan with a small amount of oil over medium-high heat.',
+      'Add garlic and mixed vegetables. Stir-fry until vegetables are tender-crisp.',
+      'Add soy sauce and sesame oil. Toss to coat evenly.',
+      'Serve the stir-fry over warm cooked rice.'
+    ],
+    tips: 'Add any protein you have on hand, such as tofu or cooked chicken.'
+  },
+  {
+    title: 'Creamy Tomato Pasta Bake',
+    description: 'Comforting baked pasta that helps use up tomatoes, dairy, and leftover vegetables.',
+    focusItems: ['pasta', 'tomatoes', 'cheese'],
+    ingredients: [
+      '200g pasta (any shape)',
+      '2 cups diced tomatoes or tomato sauce',
+      '1 cup shredded cheese',
+      '1/2 cup milk or cream',
+      '1 cup chopped vegetables (spinach, mushrooms, peppers)'
+    ],
+    steps: [
+      'Preheat oven to 190°C (375°F). Cook pasta until just al dente.',
+      'Combine cooked pasta, tomatoes, vegetables, and milk in a baking dish.',
+      'Top with shredded cheese.',
+      'Bake for 15-20 minutes until bubbly and golden on top.'
+    ],
+    tips: 'Use any cheese or vegetables you need to finish. Add herbs for extra flavor.'
+  },
+  {
+    title: 'Breakfast Egg Muffins',
+    description: 'Portable breakfast option that uses eggs and leftover vegetables or meats.',
+    focusItems: ['eggs', 'spinach', 'cheese'],
+    ingredients: [
+      '6 eggs',
+      '1 cup chopped vegetables (spinach, onions, peppers)',
+      '1/2 cup shredded cheese',
+      'Salt and pepper to taste'
+    ],
+    steps: [
+      'Preheat oven to 180°C (350°F). Grease a muffin tin.',
+      'Whisk eggs, salt, and pepper in a bowl.',
+      'Stir in chopped vegetables and cheese.',
+      'Pour mixture into muffin cups and bake for 18-20 minutes until set.'
+    ],
+    tips: 'Great for meal prep. Store in the fridge and reheat for quick breakfasts.'
+  }
+];
+
+function extractJsonFromText(text) {
+  if (!text) return null;
+  const cleaned = text.replace(/```json/gi, '').replace(/```/g, '').trim();
+  try {
+    return JSON.parse(cleaned);
+  } catch (error) {
+    console.warn('Unable to parse AI response as JSON:', error);
+    return null;
+  }
+}
+
+function buildRecipePrompt(ingredientsSummary, recipeCount) {
+  const intro = `
+  You are an assistant chef that helps households reduce food waste by proposing meals using ingredients they currently own.
+  `;
+  const instructions = `
+  Based on the following ingredient list, propose exactly ${recipeCount} recipe idea${recipeCount > 1 ? 's' : ''}. Focus on items that are nearing expiry first.
+
+  Ingredients:
+  ${ingredientsSummary}
+
+  Respond with JSON ONLY in the following format:
+  [
+    {
+      "title": "Recipe name",
+      "description": "Short enticing summary",
+      "focusItems": ["ingredient1", "ingredient2"],
+      "ingredients": ["list of ingredients with measures"],
+      "steps": ["step 1", "step 2", "step 3"],
+      "tips": "Optional extra tips"
+    }
+  ]
+
+  Do not include any additional commentary or markdown. Keep recipes practical for a household kitchen.
+  `;
+  return `${intro}\n${instructions}`;
+}
+
+async function generateRecipeSuggestionsFromAI(ingredients, recipeCount) {
+  if (!geminiClient) {
+    return { suggestions: FALLBACK_RECIPES, source: 'fallback', message: 'Gemini API not configured.' };
+  }
+
+  try {
+    const model = geminiClient.getGenerativeModel({ model: 'gemini-2.5-flash' });
+    const prompt = buildRecipePrompt(ingredients, recipeCount);
+    const result = await model.generateContent(prompt);
+    const text = result?.response?.text?.();
+    const parsed = extractJsonFromText(text);
+    if (Array.isArray(parsed) && parsed.length > 0) {
+      return { suggestions: parsed.slice(0, recipeCount), source: 'ai' };
+    }
+    return { suggestions: FALLBACK_RECIPES, source: 'fallback', message: 'AI response could not be parsed.' };
+  } catch (error) {
+    console.error('Error generating AI recipes:', error);
+    return { suggestions: FALLBACK_RECIPES, source: 'fallback', message: 'AI service error.' };
+  }
+}
 
 // 发送验证码API
 app.post('/api/send-verification-code', async (req, res) => {
@@ -134,19 +301,13 @@ app.post('/api/verify-code', async (req, res) => {
 app.post('/api/register', async (req, res) => {
   try {
     console.log('=== 开始用户注册 ===');
-    const { fullName, email, password, confirmPassword, householdSize } = req.body;
+    const { fullName, email, password, householdSize } = req.body;
     console.log('注册数据:', { fullName, email, householdSize });
     
     // 验证必填字段
-    if (!fullName || !email || !password || !confirmPassword) {
+    if (!fullName || !email || !password) {
       console.log('错误: 必填字段缺失');
       return res.status(400).json({ success: false, message: 'All required fields must be filled' });
-    }
-    
-    // 验证密码匹配
-    if (password !== confirmPassword) {
-      console.log('错误: 密码不匹配');
-      return res.status(400).json({ success: false, message: 'Passwords do not match' });
     }
     
     // 验证邮箱格式
@@ -748,6 +909,207 @@ app.delete('/api/donations/:donationId', async (req, res) => {
   }
 });
 
+// ========== 餐食计划 API ==========
+
+app.get('/api/meal-plans', async (req, res) => {
+  try {
+    const userId = req.headers['x-user-id'];
+    if (!userId) {
+      return res.status(401).json({ success: false, message: 'User authentication required' });
+    }
+
+    const weekStartDate = req.query.weekStartDate || getWeekStartISO();
+    const mealPlan = await mealPlanService.getMealPlan(userId, weekStartDate);
+
+    res.json({
+      success: true,
+      mealPlan
+    });
+  } catch (error) {
+    console.error('Error fetching meal plan:', error);
+    res.status(500).json({ success: false, message: 'Failed to fetch meal plan' });
+  }
+});
+
+app.post('/api/meal-plans', async (req, res) => {
+  try {
+    const userId = req.headers['x-user-id'];
+    if (!userId) {
+      return res.status(401).json({ success: false, message: 'User authentication required' });
+    }
+
+    const { weekStartDate, plan } = req.body;
+    if (!weekStartDate || !plan) {
+      return res.status(400).json({ success: false, message: 'Week start date and plan are required' });
+    }
+
+    const reservations = calculateReservationsFromPlan(plan);
+    const savedPlan = await mealPlanService.saveMealPlan(userId, weekStartDate, plan, reservations);
+
+    await foodInventoryService.updateReservedQuantities(userId, reservations);
+    await notificationService.syncMealPlanReminders(userId, weekStartDate, plan);
+
+    res.json({
+      success: true,
+      mealPlan: savedPlan
+    });
+  } catch (error) {
+    console.error('Error saving meal plan:', error);
+    res.status(500).json({ success: false, message: 'Failed to save meal plan' });
+  }
+});
+
+app.post('/api/meal-plans/suggestions', async (req, res) => {
+  try {
+    const userId = req.headers['x-user-id'];
+    if (!userId) {
+      return res.status(401).json({ success: false, message: 'User authentication required' });
+    }
+
+    const { focusExpiringOnly = false } = req.body || {};
+    const inventoryResult = await foodInventoryService.getFoodItems(userId);
+
+    if (!inventoryResult.success) {
+      return res.status(500).json({ success: false, message: inventoryResult.error || 'Failed to load inventory' });
+    }
+
+    const now = new Date();
+    const normalizeItem = item => {
+      const expiryDate = item.expiryDate ? new Date(item.expiryDate) : null;
+      let daysUntilExpiry = null;
+      if (expiryDate && !Number.isNaN(expiryDate.getTime())) {
+        daysUntilExpiry = Math.ceil((expiryDate - now) / (1000 * 60 * 60 * 24));
+      }
+      return {
+        id: item._id?.toString(),
+        name: item.name,
+        quantity: item.quantity || 1,
+        category: item.category || '',
+        expiryDate: item.expiryDate || null,
+        daysUntilExpiry,
+        forDonation: item.forDonation || false
+      };
+    };
+
+    const normalizedItems = (inventoryResult.items || [])
+      .filter(item => !item.forDonation)
+      .map(normalizeItem);
+
+    const activeItems = normalizedItems.filter(item =>
+      item.daysUntilExpiry === null || item.daysUntilExpiry >= 0
+    );
+
+    const expiringItems = activeItems.filter(item => item.daysUntilExpiry !== null && item.daysUntilExpiry <= 5);
+    const candidateItems = focusExpiringOnly && expiringItems.length > 0 ? expiringItems : activeItems;
+    if (candidateItems.length === 0) {
+      return res.json({
+        success: true,
+        suggestions: [],
+        source: 'none',
+        message: 'No fresh ingredients available for recipe suggestions.',
+        usedIngredients: []
+      });
+    }
+
+    const limitedItems = candidateItems
+      .sort((a, b) => {
+        const aVal = a.daysUntilExpiry === null ? Number.MAX_SAFE_INTEGER : a.daysUntilExpiry;
+        const bVal = b.daysUntilExpiry === null ? Number.MAX_SAFE_INTEGER : b.daysUntilExpiry;
+        return aVal - bVal;
+      })
+      .slice(0, 12);
+
+    const ingredientSummary = limitedItems
+      .map(item => {
+        const expiryText = item.daysUntilExpiry === null
+          ? 'no expiry data'
+          : item.daysUntilExpiry < 0
+            ? `expired ${Math.abs(item.daysUntilExpiry)} day(s) ago`
+            : `expires in ${item.daysUntilExpiry} day(s)`;
+        return `- ${item.name} (qty: ${item.quantity}) • ${expiryText}`;
+      })
+      .join('\n');
+
+    let recipeCount = 1;
+    if (limitedItems.length === 1) {
+      recipeCount = 3;
+    } else if (limitedItems.length === 2) {
+      recipeCount = 2;
+    }
+
+    const aiResult = await generateRecipeSuggestionsFromAI(ingredientSummary, recipeCount);
+
+    res.json({
+      success: true,
+      suggestions: aiResult.suggestions,
+      source: aiResult.source,
+      message: aiResult.message,
+      usedIngredients: limitedItems
+    });
+  } catch (error) {
+    console.error('Error generating meal plan suggestions:', error);
+    res.status(500).json({ success: false, message: 'Failed to generate recipe suggestions' });
+  }
+});
+
+// ========== 通知管理 API ==========
+
+// 获取通知列表（并自动生成最新提醒）
+app.get('/api/notifications', async (req, res) => {
+  try {
+    const userId = req.headers['x-user-id'];
+    if (!userId) {
+      return res.status(401).json({ success: false, message: 'User authentication required' });
+    }
+
+    await notificationService.generateNotificationsForUser(userId);
+    const result = await notificationService.getNotifications(userId);
+
+    res.json({ success: true, notifications: result.notifications });
+  } catch (error) {
+    console.error('Error fetching notifications:', error);
+    res.status(500).json({ success: false, message: 'Failed to fetch notifications' });
+  }
+});
+
+// 标记单条通知为已读
+app.post('/api/notifications/:notificationId/read', async (req, res) => {
+  try {
+    const userId = req.headers['x-user-id'];
+    if (!userId) {
+      return res.status(401).json({ success: false, message: 'User authentication required' });
+    }
+
+    const { notificationId } = req.params;
+    const updated = await notificationService.markAsRead(notificationId, userId);
+
+    if (!updated) {
+      return res.status(404).json({ success: false, message: 'Notification not found' });
+    }
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error marking notification as read:', error);
+    res.status(500).json({ success: false, message: 'Failed to mark notification as read' });
+  }
+});
+
+// 标记全部通知为已读
+app.post('/api/notifications/mark-all-read', async (req, res) => {
+  try {
+    const userId = req.headers['x-user-id'];
+    if (!userId) {
+      return res.status(401).json({ success: false, message: 'User authentication required' });
+    }
+
+    const count = await notificationService.markAllAsRead(userId);
+    res.json({ success: true, updated: count });
+  } catch (error) {
+    console.error('Error marking all notifications as read:', error);
+    res.status(500).json({ success: false, message: 'Failed to update notifications' });
+  }
+});
+
 // 获取用户的捐赠食物列表
 app.get('/api/donation-items', async (req, res) => {
   try {
@@ -854,6 +1216,192 @@ app.get('/api/test-email', async (req, res) => {
       error: error.message,
       timestamp: new Date().toISOString() 
     });
+  }
+});
+
+// ==================== Analytics APIs ====================
+
+// 获取分析摘要
+app.get('/api/analytics/summary', async (req, res) => {
+  try {
+    const userId = req.headers['x-user-id'];
+    
+    if (!userId) {
+      return res.status(401).json({ success: false, message: 'User ID is required' });
+    }
+
+    const { startDate, endDate } = req.query;
+    const dateRange = {};
+    if (startDate) dateRange.startDate = startDate;
+    if (endDate) dateRange.endDate = endDate;
+
+    const result = await analyticsService.getAnalyticsSummary(userId, dateRange);
+    
+    if (result.success) {
+      res.json(result);
+    } else {
+      res.status(500).json(result);
+    }
+  } catch (error) {
+    console.error('Error getting analytics summary:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// 获取已使用的物品列表
+app.get('/api/analytics/used-items', async (req, res) => {
+  try {
+    const userId = req.headers['x-user-id'];
+    
+    if (!userId) {
+      return res.status(401).json({ success: false, message: 'User ID is required' });
+    }
+
+    const { startDate, endDate } = req.query;
+    const dateRange = {};
+    if (startDate) dateRange.startDate = startDate;
+    if (endDate) dateRange.endDate = endDate;
+
+    const result = await analyticsService.getUsedItems(userId, dateRange);
+    
+    if (result.success) {
+      res.json(result);
+    } else {
+      res.status(500).json(result);
+    }
+  } catch (error) {
+    console.error('Error getting used items:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// 获取图表数据
+app.get('/api/analytics/chart-data', async (req, res) => {
+  try {
+    const userId = req.headers['x-user-id'];
+    
+    if (!userId) {
+      return res.status(401).json({ success: false, message: 'User ID is required' });
+    }
+
+    const { type, startDate, endDate } = req.query;
+    const chartType = type || 'weekly';
+    const dateRange = {};
+    if (startDate) dateRange.startDate = startDate;
+    if (endDate) dateRange.endDate = endDate;
+
+    const result = await analyticsService.getChartData(userId, chartType, dateRange);
+    
+    if (result.success) {
+      res.json(result);
+    } else {
+      res.status(500).json(result);
+    }
+  } catch (error) {
+    console.error('Error getting chart data:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// 获取类别统计
+app.get('/api/analytics/category-stats', async (req, res) => {
+  try {
+    const userId = req.headers['x-user-id'];
+    
+    if (!userId) {
+      return res.status(401).json({ success: false, message: 'User ID is required' });
+    }
+
+    const result = await analyticsService.getCategoryStats(userId);
+    
+    if (result.success) {
+      res.json(result);
+    } else {
+      res.status(500).json(result);
+    }
+  } catch (error) {
+    console.error('Error getting category stats:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// 获取时间序列数据
+app.get('/api/analytics/time-series', async (req, res) => {
+  try {
+    const userId = req.headers['x-user-id'];
+    
+    if (!userId) {
+      return res.status(401).json({ success: false, message: 'User ID is required' });
+    }
+
+    const days = parseInt(req.query.days) || 30;
+    const result = await analyticsService.getTimeSeriesData(userId, days);
+    
+    if (result.success) {
+      res.json(result);
+    } else {
+      res.status(500).json(result);
+    }
+  } catch (error) {
+    console.error('Error getting time series data:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// 获取指定类型的物品列表
+app.get('/api/analytics/items', async (req, res) => {
+  try {
+    const userId = req.headers['x-user-id'];
+    
+    if (!userId) {
+      return res.status(401).json({ success: false, message: 'User ID is required' });
+    }
+
+    const { type, startDate, endDate } = req.query;
+
+    if (!type) {
+      return res.status(400).json({ success: false, message: 'Type parameter is required' });
+    }
+
+    const dateRange = {};
+    if (startDate) dateRange.startDate = startDate;
+    if (endDate) dateRange.endDate = endDate;
+
+    const result = await analyticsService.getItemsByType(userId, type, dateRange);
+    
+    if (result.success) {
+      res.json(result);
+    } else {
+      res.status(400).json(result);
+    }
+  } catch (error) {
+    console.error('Error getting analytics items:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// 标记物品为已使用（软删除）
+app.put('/api/food-inventory/:id/mark-used', async (req, res) => {
+  try {
+    const userId = req.headers['x-user-id'];
+    
+    if (!userId) {
+      return res.status(401).json({ success: false, message: 'User ID is required' });
+    }
+
+    const { id } = req.params;
+    const { reason } = req.body;
+    
+    const success = await foodInventoryService.markAsUsed(id, userId, reason || 'used');
+    
+    if (success) {
+      res.json({ success: true, message: 'Item marked as used successfully' });
+    } else {
+      res.status(404).json({ success: false, message: 'Item not found or could not be updated' });
+    }
+  } catch (error) {
+    console.error('Error marking item as used:', error);
+    res.status(500).json({ success: false, message: error.message });
   }
 });
 
