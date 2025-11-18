@@ -40,6 +40,18 @@ export class MealPlanService {
     );
     return result.value;
   }
+
+  async getAllMealPlans(userId) {
+    const collection = await this.getCollection();
+    const plans = await collection
+      .find({ userId })
+      .sort({ weekStartDate: -1 })
+      .toArray();
+    return plans;
+  }
 }
+
+
+
 
 
