@@ -1,7 +1,7 @@
 <template>
   <div class="analytics-page">
     <div class="page-header">
-      <h1>📊 Track and Report</h1>
+      <h1>Track and Report</h1>
       <p class="subtitle">Monitor your food-saving impact and progress</p>
     </div>
 
@@ -23,169 +23,343 @@
 
     <!-- Analytics Content -->
     <div v-else class="analytics-content">
-      <!-- Filter Controls -->
-      <div class="filter-controls">
-        <div class="date-range-selector">
-          <label>Date Range:</label>
-          <select v-model="selectedTimeRange" @change="onTimeRangeChange">
-            <option value="all">All Time</option>
-            <option value="week">Last Week</option>
-            <option value="month">Last Month</option>
-            <option value="3months">Last 3 Months</option>
-            <option value="year">Last Year</option>
-          </select>
-        </div>
-        
-        <div class="chart-type-selector">
-          <label>View:</label>
-          <select v-model="chartType" @change="onChartTypeChange">
-            <option value="weekly">Weekly</option>
-            <option value="daily">Daily</option>
-            <option value="monthly">Monthly</option>
-          </select>
-        </div>
-      </div>
-
-      <!-- Summary Cards -->
-      <div class="summary-cards">
-        <div class="stat-card total-saved" @click="showDetails('saved')">
-          <div class="card-icon">🎯</div>
-          <div class="card-content">
-            <h3>{{ summary.foodSavedFromWaste }}</h3>
-            <p>Total Food Saved</p>
-            <small>Click for details</small>
-          </div>
-        </div>
-
-        <div class="stat-card items-used" @click="showDetails('used')">
-          <div class="card-icon">✅</div>
-          <div class="card-content">
-            <h3>{{ summary.totalItemsUsed }}</h3>
-            <p>Items Used</p>
-            <small>Click for details</small>
-          </div>
-        </div>
-
-        <div class="stat-card items-donated" @click="showDetails('donated')">
-          <div class="card-icon">❤️</div>
-          <div class="card-content">
-            <h3>{{ summary.totalItemsDonated }}</h3>
-            <p>Items Donated</p>
-            <small>Click for details</small>
-          </div>
-        </div>
-
-        <div class="stat-card items-expired" @click="showDetails('expired')">
-          <div class="card-icon">⚠️</div>
-          <div class="card-content">
-            <h3>{{ summary.totalItemsExpired }}</h3>
-            <p>Items Expired</p>
-            <small>Click for details</small>
-          </div>
-        </div>
-      </div>
-
-      <!-- Impact Summary -->
-      <div class="impact-section">
-        <h2>Your Impact</h2>
-        <div class="impact-content">
-          <div class="impact-stat">
-            <div class="stat-label">Success Rate</div>
-            <div class="stat-value">{{ successRate }}%</div>
-            <div class="progress-bar">
-              <div class="progress-fill" :style="{ width: successRate + '%' }"></div>
+      <div class="analytics-card">
+        <!-- Food Impact Overview + Your Impact side by side -->
+        <div class="overview-impact-row" v-if="hasAnyData || summaryRange !== 'all'">
+          <!-- Food Impact Overview -->
+          <div class="overview-section">
+            <div class="section-header">
+              <div>
+                <h2>Food Impact Overview</h2>
+                <p>Visual breakdown of how your food items were handled</p>
+              </div>
+              <div class="section-filter">
+                <label>Range</label>
+                <select v-model="summaryRange" @change="handleSummaryRangeChange">
+                  <option 
+                    v-for="option in rangeOptions" 
+                    :key="`summary-${option.value}`" 
+                    :value="option.value"
+                  >
+                    {{ option.label }}
+                  </option>
+                </select>
+              </div>
+            </div>
+            <div v-if="isLoadingSummary" class="section-loading">Updating summary...</div>
+            <div v-else class="overview-content">
+              <div class="donut-wrapper">
+                <div class="donut-chart" :style="donutStyle">
+                  <div class="donut-center">
+                    <div class="center-value">{{ summary.foodSavedFromWaste }}</div>
+                    <div class="center-label">Items Saved</div>
+                  </div>
+                </div>
+              </div>
+              <div class="donut-legend">
+                <div 
+                  class="legend-item" 
+                  v-for="segment in impactSegments" 
+                  :key="segment.key"
+                >
+                  <span class="legend-dot" :style="{ background: segment.color }"></span>
+                  <div class="legend-text">
+                    <div class="legend-label">{{ segment.label }}</div>
+                    <div class="legend-value">{{ segment.value }}</div>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
-          <div class="impact-description">
-            <p>You've successfully used or donated <strong>{{ summary.foodSavedFromWaste }}</strong> out of <strong>{{ summary.totalItemsLogged }}</strong> food items, preventing them from going to waste!</p>
-          </div>
-        </div>
-      </div>
 
-      <!-- Category Stats Table -->
-      <div class="stats-table-section" v-if="categoryStats.length > 0">
-        <h2>Detailed Category Statistics</h2>
-        <div class="stats-table">
-          <table>
-            <thead>
-              <tr>
-                <th>Category</th>
-                <th>Total</th>
-                <th>Used</th>
-                <th>Donated</th>
-                <th>Expired</th>
-                <th>Success Rate</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="stat in categoryStats" :key="stat._id">
-                <td class="category-cell">{{ stat._id }}</td>
-                <td>{{ stat.total }}</td>
-                <td class="used-cell">{{ stat.used }}</td>
-                <td class="donated-cell">{{ stat.donated }}</td>
-                <td class="expired-cell">{{ stat.expired }}</td>
-                <td>
-                  <span class="success-badge" :class="getSuccessClass(stat)">
-                    {{ calculateCategorySuccess(stat) }}%
-                  </span>
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      <!-- Time Series Chart -->
-      <div class="time-series-section" v-if="timeSeriesData.length > 0">
-        <h2>Activity Over Time (Last 30 Days)</h2>
-        <div class="time-chart">
-          <div class="chart-container">
-            <div 
-              v-for="(point, index) in timeSeriesData" 
-              :key="index"
-              class="chart-bar"
-              :style="{ height: (point.added / maxTimeSeriesValue * 100) + '%' }"
-              :title="`${point._id.month}/${point._id.day}: ${point.added} added, ${point.used} used`"
-            >
-              <div class="bar-segment added" :style="{ height: '100%' }"></div>
-              <div 
-                class="bar-segment used" 
-                :style="{ height: (point.used / point.added * 100) + '%' }"
-              ></div>
+          <!-- Impact Summary -->
+          <div class="impact-section">
+            <div class="section-header compact">
+              <div>
+                <h2>Your Impact</h2>
+                <p>{{ getRangeLabel(summaryRange) }}</p>
+              </div>
             </div>
-          </div>
-          <div class="chart-legend">
-            <div class="legend-item">
-              <span class="legend-color added"></span>
-              <span>Items Added</span>
-            </div>
-            <div class="legend-item">
-              <span class="legend-color used"></span>
-              <span>Items Used</span>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Recent Activity -->
-      <div class="recent-activity-section" v-if="recentUsedItems.length > 0">
-        <h2>Recently Used Items</h2>
-        <div class="activity-list">
-          <div 
-            v-for="item in recentUsedItems.slice(0, 10)" 
-            :key="item._id"
-            class="activity-item"
-          >
-            <div class="activity-icon">✓</div>
-            <div class="activity-content">
-              <div class="activity-name">{{ item.name }}</div>
-              <div class="activity-meta">
-                <span class="activity-category">{{ item.category }}</span>
-                <span class="activity-date">{{ formatDate(item.usedDate) }}</span>
+            <div class="impact-content">
+              <div class="impact-stat">
+                <div class="stat-label">Donation Success Rate</div>
+                <div class="stat-value">{{ successRate }}%</div>
+                <div class="progress-bar">
+                  <div class="progress-fill" :style="{ width: successRate + '%' }"></div>
+                </div>
+              </div>
+              <div class="impact-description">
+                <p>You've donated <strong>{{ summary.totalItemsDonated }}</strong> out of <strong>{{ summary.totalItemsLogged }}</strong> food items, helping others and preventing food waste!</p>
               </div>
             </div>
           </div>
         </div>
+
+        <!-- Category Stats Table -->
+        <div class="stats-table-section" v-if="hasAnyData || categoryRange !== 'all'">
+          <div class="section-header">
+            <div>
+              <h2>Detailed Category Statistics</h2>
+              <p>{{ getRangeLabel(categoryRange) }}</p>
+            </div>
+            <div class="section-filter">
+              <label>Range</label>
+              <select v-model="categoryRange" @change="handleCategoryRangeChange">
+                <option 
+                  v-for="option in rangeOptions" 
+                  :key="`category-${option.value}`" 
+                  :value="option.value"
+                >
+                  {{ option.label }}
+                </option>
+              </select>
+            </div>
+          </div>
+          <div v-if="isLoadingCategories" class="section-loading">Loading category data...</div>
+          <div v-else-if="categoryStats.length === 0" class="section-empty">
+            No category data for the selected range.
+          </div>
+          <div v-else class="stats-table">
+            <table>
+              <thead>
+                <tr>
+                  <th>Category</th>
+                  <th>Total</th>
+                  <th>Used</th>
+                  <th>Donated</th>
+                  <th>Expired</th>
+                  <th>Success Rate</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="stat in categoryStats" :key="stat._id">
+                  <td class="category-cell">{{ stat._id }}</td>
+                  <td>{{ stat.total }}</td>
+                  <td class="used-cell">{{ stat.used }}</td>
+                  <td class="donated-cell">{{ stat.donated }}</td>
+                  <td class="expired-cell">{{ stat.expired }}</td>
+                  <td>
+                    <span class="success-badge" :class="getSuccessClass(stat)">
+                      {{ calculateCategorySuccess(stat) }}%
+                    </span>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Time Series Chart -->
+        <div class="time-series-section" v-if="hasAnyData || timeSeriesData.length > 0 || timeSeriesRange !== 'all'">
+          <div class="section-header time-series-header">
+            <div>
+              <h2>Activity Over Time</h2>
+              <p>{{ getRangeLabel(timeSeriesRange) }}</p>
+            </div>
+            <div class="section-filter-group">
+              <div class="section-filter">
+                <label>Range</label>
+                <select v-model="timeSeriesRange" @change="handleTimeSeriesRangeChange">
+                  <option 
+                    v-for="option in rangeOptions" 
+                    :key="`timeseries-${option.value}`" 
+                    :value="option.value"
+                  >
+                    {{ option.label }}
+                  </option>
+                </select>
+              </div>
+              <div class="section-filter">
+                <label>View</label>
+                <select v-model="chartType" @change="onChartTypeChange">
+                  <option value="weekly">Weekly</option>
+                  <option value="daily">Daily</option>
+                  <option value="monthly">Monthly</option>
+                </select>
+              </div>
+            </div>
+          </div>
+          <div class="time-chart">
+            <div v-if="isLoadingTimeSeries" class="section-loading">Loading activity data...</div>
+            <div v-else-if="timeSeriesData.length === 0" class="section-empty">
+              No activity data for the selected range.
+            </div>
+            <div v-else class="chart-wrapper">
+              <div class="chart-area">
+                <svg 
+                  class="line-chart" 
+                  viewBox="0 0 800 250" 
+                  preserveAspectRatio="xMidYMid meet"
+                >
+                  <defs>
+                    <!-- Gradient for added items area -->
+                    <linearGradient id="addedGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+                      <stop offset="0%" style="stop-color:#4CAF50;stop-opacity:0.3" />
+                      <stop offset="100%" style="stop-color:#4CAF50;stop-opacity:0.05" />
+                    </linearGradient>
+                    <!-- Gradient for used items area -->
+                    <linearGradient id="usedGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+                      <stop offset="0%" style="stop-color:#2196F3;stop-opacity:0.3" />
+                      <stop offset="100%" style="stop-color:#2196F3;stop-opacity:0.05" />
+                    </linearGradient>
+                    <!-- Drop shadow filter -->
+                    <filter id="shadow" x="-50%" y="-50%" width="200%" height="200%">
+                      <feGaussianBlur in="SourceAlpha" stdDeviation="2"/>
+                      <feOffset dx="0" dy="2" result="offsetblur"/>
+                      <feComponentTransfer>
+                        <feFuncA type="linear" slope="0.3"/>
+                      </feComponentTransfer>
+                      <feMerge>
+                        <feMergeNode/>
+                        <feMergeNode in="SourceGraphic"/>
+                      </feMerge>
+                    </filter>
+                  </defs>
+                  
+                  <!-- Grid lines -->
+                  <g class="grid-lines">
+                    <line 
+                      v-for="(tick, i) in chartTicks" 
+                      :key="'grid-'+i"
+                      :x1="60" 
+                      :y1="20 + (i * 210 / 5)" 
+                      :x2="780" 
+                      :y2="20 + (i * 210 / 5)" 
+                      class="grid-line"
+                    />
+                  </g>
+                  
+                  <!-- Y-axis title -->
+                  <text 
+                    x="30" 
+                    y="125" 
+                    class="y-axis-title"
+                    text-anchor="middle"
+                    transform="rotate(-90, 30, 125)"
+                  >
+                    Items
+                  </text>
+                  
+                  <!-- Y-axis labels -->
+                  <g class="y-labels">
+                    <text 
+                      v-for="(tick, i) in chartTicks" 
+                      :key="'label-'+i"
+                      :x="55" 
+                      :y="25 + (i * 210 / 5)" 
+                      class="y-label"
+                      text-anchor="end"
+                    >
+                      {{ tick }}
+                    </text>
+                  </g>
+                  
+                  <!-- Area fill for added items -->
+                  <path 
+                    v-if="addedAreaPath" 
+                    :d="addedAreaPath" 
+                    class="area-fill added"
+                    fill="url(#addedGradient)"
+                  />
+                  
+                  <!-- Area fill for used items -->
+                  <path 
+                    v-if="usedAreaPath" 
+                    :d="usedAreaPath" 
+                    class="area-fill used"
+                    fill="url(#usedGradient)"
+                  />
+                  
+                  <!-- Line for added items -->
+                  <path 
+                    v-if="addedLinePath" 
+                    :d="addedLinePath" 
+                    class="line added"
+                    filter="url(#shadow)"
+                  />
+                  
+                  <!-- Line for used items -->
+                  <path 
+                    v-if="usedLinePath" 
+                    :d="usedLinePath" 
+                    class="line used"
+                    filter="url(#shadow)"
+                  />
+                  
+                  <!-- Data points for added items -->
+                  <g v-if="addedDataPoints.length > 0">
+                    <circle 
+                      v-for="(point, idx) in addedDataPoints" 
+                      :key="'added-'+idx"
+                      :cx="point.x" 
+                      :cy="point.y" 
+                      r="4"
+                      class="data-point added"
+                      :data-tooltip="`${point.date}: ${point.value} added`"
+                    />
+                    <circle 
+                      v-for="(point, idx) in addedDataPoints" 
+                      :key="'added-inner-'+idx"
+                      :cx="point.x" 
+                      :cy="point.y" 
+                      r="2"
+                      class="data-point-inner added"
+                    />
+                  </g>
+                  
+                  <!-- Data points for used items -->
+                  <g v-if="usedDataPoints.length > 0">
+                    <circle 
+                      v-for="(point, idx) in usedDataPoints" 
+                      :key="'used-'+idx"
+                      :cx="point.x" 
+                      :cy="point.y" 
+                      r="4"
+                      class="data-point used"
+                      :data-tooltip="`${point.date}: ${point.value} used`"
+                    />
+                    <circle 
+                      v-for="(point, idx) in usedDataPoints" 
+                      :key="'used-inner-'+idx"
+                      :cx="point.x" 
+                      :cy="point.y" 
+                      r="2"
+                      class="data-point-inner used"
+                    />
+                  </g>
+                  
+                  <!-- X-axis labels -->
+                  <g class="x-labels">
+                    <text 
+                      v-for="(point, idx) in xAxisLabels" 
+                      :key="'x-label-'+idx"
+                      :x="point.x" 
+                      :y="245" 
+                      class="x-label"
+                      text-anchor="middle"
+                    >
+                      {{ point.label }}
+                    </text>
+                  </g>
+                </svg>
+                <div class="x-axis-title">
+                  <span>Range: {{ getRangeLabel(timeSeriesRange) }}</span>
+                </div>
+              </div>
+            </div>
+            <div class="chart-legend">
+              <div class="legend-item">
+                <span class="legend-color added"></span>
+                <span>Items Added</span>
+              </div>
+              <div class="legend-item">
+                <span class="legend-color used"></span>
+                <span>Items Used</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
       </div>
     </div>
   </div>
@@ -204,9 +378,18 @@ export default {
   data() {
     return {
       isLoading: true,
-      selectedTimeRange: 'all',
+      summaryRange: 'all',
+      categoryRange: 'all',
+      timeSeriesRange: 'month',
       chartType: 'weekly',
-      dateRange: {},
+      rangeOptions: [
+        { value: 'all', label: 'All Time' },
+        { value: 'today', label: 'Today' },
+        { value: 'week', label: 'Last 7 Days' },
+        { value: 'month', label: 'Last 30 Days' },
+        { value: '3months', label: 'Last 90 Days' },
+        { value: 'year', label: 'Last Year' }
+      ],
       summary: {
         totalItemsLogged: 0,
         totalItemsUsed: 0,
@@ -217,20 +400,109 @@ export default {
       },
       categoryStats: [],
       timeSeriesData: [],
-      recentUsedItems: []
+      isLoadingSummary: false,
+      isLoadingCategories: false,
+      isLoadingTimeSeries: false,
+      hasAnyData: false
     }
   },
   computed: {
     hasData() {
-      return this.summary.totalItemsLogged > 0
+      return this.hasAnyData
     },
     successRate() {
       if (this.summary.totalItemsLogged === 0) return 0
-      return Math.round((this.summary.foodSavedFromWaste / this.summary.totalItemsLogged) * 100)
+      return Math.round((this.summary.totalItemsDonated / this.summary.totalItemsLogged) * 100)
     },
     maxTimeSeriesValue() {
       if (this.timeSeriesData.length === 0) return 1
-      return Math.max(...this.timeSeriesData.map(d => d.added))
+      return Math.max(
+        ...this.timeSeriesData.map(d => Math.max(d.added || 0, d.used || 0))
+      )
+    },
+    addedLinePath() {
+      if (!this.timeSeriesData.length) return ''
+      return this.calculateLinePath('added')
+    },
+    usedLinePath() {
+      if (!this.timeSeriesData.length) return ''
+      return this.calculateLinePath('used')
+    },
+    addedAreaPath() {
+      if (!this.timeSeriesData.length) return ''
+      return this.calculateAreaPath('added')
+    },
+    usedAreaPath() {
+      if (!this.timeSeriesData.length) return ''
+      return this.calculateAreaPath('used')
+    },
+    addedDataPoints() {
+      if (!this.timeSeriesData.length) return []
+      return this.calculateDataPoints('added')
+    },
+    usedDataPoints() {
+      if (!this.timeSeriesData.length) return []
+      return this.calculateDataPoints('used')
+    },
+    xAxisLabels() {
+      if (!this.timeSeriesData.length) return []
+      const count = this.timeSeriesData.length
+      const step = count > 1 ? 720 / (count - 1) : 0
+      const labels = []
+      const showEvery = Math.max(1, Math.floor(count / 8)) // Show ~8 labels
+      
+      this.timeSeriesData.forEach((point, index) => {
+        if (index % showEvery === 0 || index === count - 1) {
+          labels.push({
+            x: 60 + (step * index),
+            label: `${point._id.month}/${point._id.day}`
+          })
+        }
+      })
+      return labels
+    },
+    chartTicks() {
+      const max = this.maxTimeSeriesValue
+      const top = Math.max(1, Math.ceil(max / 5) * 5)
+      const step = Math.max(1, Math.round(top / 5))
+      const ticks = []
+      for (let i = 0; i <= 5; i++) {
+        ticks.push(top - i * step)
+      }
+      return ticks
+    },
+    impactSegments() {
+      const used = this.summary.totalItemsUsed || 0
+      const donated = this.summary.totalItemsDonated || 0
+      const expired = this.summary.totalItemsExpired || 0
+      const unexpired = this.summary.totalUnexpiredItems || 0
+
+      return [
+        { key: 'used', label: 'Items Used', value: used, color: '#4CAF50' },
+        { key: 'donated', label: 'Items Donated', value: donated, color: '#FF6B6B' },
+        { key: 'unexpired', label: 'Unexpired Items', value: unexpired, color: '#90CAF9' },
+        { key: 'expired', label: 'Expired Items', value: expired, color: '#FFC107' }
+      ].filter(segment => segment.value > 0)
+    },
+    donutStyle() {
+      const total = this.impactSegments.reduce((sum, segment) => sum + segment.value, 0)
+      if (total === 0) {
+        return {
+          background: 'conic-gradient(#e0e0e0 0deg 360deg)'
+        }
+      }
+
+      let cumulative = 0
+      const gradients = this.impactSegments.map(segment => {
+        const start = (cumulative / total) * 360
+        cumulative += segment.value
+        const end = (cumulative / total) * 360
+        return `${segment.color} ${start}deg ${end}deg`
+      })
+
+      return {
+        background: `conic-gradient(${gradients.join(', ')})`
+      }
     }
   },
   mounted() {
@@ -251,8 +523,7 @@ export default {
         await Promise.all([
           this.loadSummary(),
           this.loadCategoryStats(),
-          this.loadTimeSeriesData(),
-          this.loadRecentUsedItems()
+          this.loadTimeSeriesData()
         ])
       } catch (error) {
         console.error('Error loading analytics:', error)
@@ -262,11 +533,21 @@ export default {
       }
     },
 
-    getDateRange() {
+    getDateRange(rangeValue = 'all') {
       const today = new Date()
+      const range = rangeValue || 'all'
+      if (range === 'all') {
+        return { startDate: null, endDate: null }
+      }
+
       let startDate = null
       
-      switch (this.selectedTimeRange) {
+      switch (range) {
+        case 'today': {
+          const startOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate())
+          startDate = startOfToday
+          break
+        }
         case 'week':
           startDate = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000)
           break
@@ -283,19 +564,32 @@ export default {
           startDate = null
       }
       
+      if (!startDate) {
+        return { startDate: null, endDate: null }
+      }
+
       return {
         startDate: startDate ? startDate.toISOString().split('T')[0] : null,
         endDate: today.toISOString().split('T')[0]
       }
     },
 
-    async loadSummary() {
+    async loadSummary(rangeValue = this.summaryRange) {
+      this.isLoadingSummary = true
       try {
-        const dateRange = this.getDateRange()
+        const dateRange = this.getDateRange(rangeValue)
         let url = 'http://localhost:3001/api/analytics/summary'
         
+        const params = new URLSearchParams()
         if (dateRange.startDate) {
-          url += `?startDate=${dateRange.startDate}&endDate=${dateRange.endDate}`
+          params.append('startDate', dateRange.startDate)
+        }
+        if (dateRange.endDate) {
+          params.append('endDate', dateRange.endDate)
+        }
+
+        if ([...params.keys()].length > 0) {
+          url += `?${params.toString()}`
         }
         
         const response = await fetch(url, {
@@ -307,15 +601,34 @@ export default {
         
         if (result.success) {
           this.summary = result.summary
+          if (rangeValue === 'all') {
+            this.hasAnyData = result.summary.totalItemsLogged > 0
+          }
         }
       } catch (error) {
         console.error('Error loading summary:', error)
+      } finally {
+        this.isLoadingSummary = false
       }
     },
 
-    async loadCategoryStats() {
+    async loadCategoryStats(rangeValue = this.categoryRange) {
+      this.isLoadingCategories = true
       try {
-        const response = await fetch('http://localhost:3001/api/analytics/category-stats', {
+        const dateRange = this.getDateRange(rangeValue)
+        let url = 'http://localhost:3001/api/analytics/category-stats'
+        const params = new URLSearchParams()
+        if (dateRange.startDate) {
+          params.append('startDate', dateRange.startDate)
+        }
+        if (dateRange.endDate) {
+          params.append('endDate', dateRange.endDate)
+        }
+        if ([...params.keys()].length > 0) {
+          url += `?${params.toString()}`
+        }
+
+        const response = await fetch(url, {
           headers: {
             'x-user-id': user.value.id
           }
@@ -327,12 +640,15 @@ export default {
         }
       } catch (error) {
         console.error('Error loading category stats:', error)
+      } finally {
+        this.isLoadingCategories = false
       }
     },
 
-    async loadTimeSeriesData() {
+    async loadTimeSeriesData(rangeValue = this.timeSeriesRange) {
+      this.isLoadingTimeSeries = true
       try {
-        const days = this.getDaysForTimeRange()
+        const days = this.getDaysForRange(rangeValue)
         const response = await fetch(`http://localhost:3001/api/analytics/time-series?days=${days}`, {
           headers: {
             'x-user-id': user.value.id
@@ -345,35 +661,14 @@ export default {
         }
       } catch (error) {
         console.error('Error loading time series data:', error)
+      } finally {
+        this.isLoadingTimeSeries = false
       }
     },
 
-    async loadRecentUsedItems() {
-      try {
-        const dateRange = this.getDateRange()
-        let url = 'http://localhost:3001/api/analytics/used-items'
-        
-        if (dateRange.startDate) {
-          url += `?startDate=${dateRange.startDate}&endDate=${dateRange.endDate}`
-        }
-        
-        const response = await fetch(url, {
-          headers: {
-            'x-user-id': user.value.id
-          }
-        })
-        const result = await response.json()
-        
-        if (result.success) {
-          this.recentUsedItems = result.items
-        }
-      } catch (error) {
-        console.error('Error loading recent used items:', error)
-      }
-    },
-
-    getDaysForTimeRange() {
-      switch (this.selectedTimeRange) {
+    getDaysForRange(rangeValue = 'month') {
+      switch (rangeValue) {
+        case 'today': return 1
         case 'week': return 7
         case 'month': return 30
         case '3months': return 90
@@ -382,18 +677,25 @@ export default {
       }
     },
 
-    onTimeRangeChange() {
-      this.loadAnalytics()
+    handleSummaryRangeChange() {
+      this.loadSummary()
+    },
+
+    handleCategoryRangeChange() {
+      this.loadCategoryStats()
+    },
+
+    handleTimeSeriesRangeChange() {
+      this.loadTimeSeriesData()
+    },
+
+    getRangeLabel(rangeValue) {
+      const option = this.rangeOptions.find(option => option.value === rangeValue)
+      return option ? option.label : 'All Time'
     },
 
     onChartTypeChange() {
       this.loadTimeSeriesData()
-    },
-
-    showDetails(type) {
-      console.log('Showing details for:', type)
-      // System Response: Display detailed information based on clicked data point
-      alert(`Details for ${type}:\n\nTotal: ${this.summary['totalItems' + type.charAt(0).toUpperCase() + type.slice(1)] || this.summary['foodSavedFromWaste']}\n\nThis represents your impact in preventing food waste!`)
     },
 
     calculateCategorySuccess(stat) {
@@ -409,17 +711,119 @@ export default {
       return 'poor'
     },
 
-    formatDate(dateString) {
-      const date = new Date(dateString)
-      const now = new Date()
-      const diffTime = Math.abs(now - date)
-      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
+    calculateLinePath(type) {
+      const max = this.maxTimeSeriesValue || 1
+      const count = this.timeSeriesData.length
+      if (count === 0) return ''
       
-      if (diffDays === 0) return 'Today'
-      if (diffDays === 1) return 'Yesterday'
-      if (diffDays < 7) return `${diffDays} days ago`
-      return date.toLocaleDateString()
+      const chartWidth = 720 // 780 - 60 (margins)
+      const chartHeight = 210 // 250 - 40 (margins)
+      const step = count > 1 ? chartWidth / (count - 1) : 0
+      
+      // Calculate all points first
+      const points = this.timeSeriesData.map((point, index) => {
+        const x = 60 + (step * index)
+        const value = type === 'added' ? (point.added || 0) : (point.used || 0)
+        const y = 20 + chartHeight - (value / max) * chartHeight
+        return { x, y }
+      })
+      
+      if (points.length === 1) {
+        return `M ${points[0].x} ${points[0].y}`
+      }
+      
+      // Build smooth curve using cubic bezier
+      let path = `M ${points[0].x} ${points[0].y}`
+      
+      for (let i = 0; i < points.length - 1; i++) {
+        const current = points[i]
+        const next = points[i + 1]
+        const prev = i > 0 ? points[i - 1] : current
+        const afterNext = i < points.length - 2 ? points[i + 2] : next
+        
+        // Calculate control points for smooth curve
+        const cp1x = current.x + (next.x - prev.x) * 0.2
+        const cp1y = current.y + (next.y - prev.y) * 0.2
+        const cp2x = next.x - (afterNext.x - current.x) * 0.2
+        const cp2y = next.y - (afterNext.y - current.y) * 0.2
+        
+        path += ` C ${cp1x} ${cp1y}, ${cp2x} ${cp2y}, ${next.x} ${next.y}`
+      }
+      
+      return path
+    },
+
+    calculateAreaPath(type) {
+      const max = this.maxTimeSeriesValue || 1
+      const count = this.timeSeriesData.length
+      if (count === 0) return ''
+      
+      const chartWidth = 720
+      const chartHeight = 210
+      const step = count > 1 ? chartWidth / (count - 1) : 0
+      const bottomY = 20 + chartHeight
+      
+      // Calculate all points first
+      const points = this.timeSeriesData.map((point, index) => {
+        const x = 60 + (step * index)
+        const value = type === 'added' ? (point.added || 0) : (point.used || 0)
+        const y = 20 + chartHeight - (value / max) * chartHeight
+        return { x, y }
+      })
+      
+      if (points.length === 1) {
+        return `M ${points[0].x} ${bottomY} L ${points[0].x} ${points[0].y} L ${points[0].x} ${bottomY} Z`
+      }
+      
+      // Start from bottom left
+      let path = `M ${points[0].x} ${bottomY} L ${points[0].x} ${points[0].y}`
+      
+      // Build smooth curve using cubic bezier (same as line path)
+      for (let i = 0; i < points.length - 1; i++) {
+        const current = points[i]
+        const next = points[i + 1]
+        const prev = i > 0 ? points[i - 1] : current
+        const afterNext = i < points.length - 2 ? points[i + 2] : next
+        
+        // Calculate control points for smooth curve
+        const cp1x = current.x + (next.x - prev.x) * 0.2
+        const cp1y = current.y + (next.y - prev.y) * 0.2
+        const cp2x = next.x - (afterNext.x - current.x) * 0.2
+        const cp2y = next.y - (afterNext.y - current.y) * 0.2
+        
+        path += ` C ${cp1x} ${cp1y}, ${cp2x} ${cp2y}, ${next.x} ${next.y}`
+      }
+      
+      // Close the path
+      const lastX = points[points.length - 1].x
+      path += ` L ${lastX} ${bottomY} Z`
+      
+      return path
+    },
+
+    calculateDataPoints(type) {
+      const max = this.maxTimeSeriesValue || 1
+      const count = this.timeSeriesData.length
+      if (count === 0) return []
+      
+      const chartWidth = 720
+      const chartHeight = 210
+      const step = count > 1 ? chartWidth / (count - 1) : 0
+      
+      return this.timeSeriesData.map((point, index) => {
+        const x = 60 + (step * index)
+        const value = type === 'added' ? (point.added || 0) : (point.used || 0)
+        const y = 20 + chartHeight - (value / max) * chartHeight
+        
+        return {
+          x,
+          y,
+          value,
+          date: `${point._id.month}/${point._id.day}`
+        }
+      })
     }
+
   }
 }
 </script>
@@ -517,133 +921,223 @@ export default {
   margin: 0 auto;
 }
 
-/* Filter Controls */
-.filter-controls {
-  display: flex;
-  gap: 20px;
-  margin-bottom: 30px;
+.analytics-card {
   background: white;
-  padding: 20px;
-  border-radius: 12px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
-  flex-wrap: wrap;
-}
-
-.date-range-selector,
-.chart-type-selector {
+  border-radius: 24px;
+  padding: 40px;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.08);
   display: flex;
-  align-items: center;
-  gap: 10px;
+  flex-direction: column;
+  gap: 30px;
 }
 
-.date-range-selector label,
-.chart-type-selector label {
+/* Section Filters */
+.section-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 20px;
+  align-items: flex-start;
+}
+
+.section-header.compact {
+  align-items: center;
+}
+
+.section-header p {
+  margin: 6px 0 0;
+  color: #6a7a6c;
+  font-size: 0.9rem;
+}
+
+.section-header h2 {
+  margin: 0;
+  color: #2c3e50;
+}
+
+.section-filter {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 160px;
+}
+
+.section-filter label {
   font-weight: 600;
   color: #2c3e50;
-  font-size: 0.95rem;
+  font-size: 0.85rem;
 }
 
-.date-range-selector select,
-.chart-type-selector select {
+.section-filter select {
   padding: 8px 12px;
   border: 2px solid #e0e0e0;
-  border-radius: 8px;
+  border-radius: 10px;
   font-size: 0.95rem;
   background: white;
   color: #2c3e50;
   cursor: pointer;
-  transition: border-color 0.3s;
+  transition: border-color 0.2s ease;
 }
 
-.date-range-selector select:hover,
-.chart-type-selector select:hover {
+.section-filter select:hover {
   border-color: #4CAF50;
 }
 
-.date-range-selector select:focus,
-.chart-type-selector select:focus {
+.section-filter select:focus {
   outline: none;
   border-color: #4CAF50;
+  box-shadow: 0 0 0 2px rgba(76, 175, 80, 0.15);
+}
+
+.section-filter-group {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.section-loading,
+.section-empty {
+  padding: 20px;
+  text-align: center;
+  color: #5b6d5b;
+  font-weight: 500;
+}
+
+.section-empty {
+  background: #fdfdf9;
+  border: 1px dashed #dfe7d8;
+  border-radius: 12px;
 }
 
 /* Summary Cards */
 .summary-cards {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-  gap: 20px;
-  margin-bottom: 40px;
+  margin: 0;
 }
 
-.stat-card {
-  background: white;
-  padding: 25px;
-  border-radius: 16px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+.overview-impact-row {
+  display: flex;
+  gap: 24px;
+  align-items: stretch;
+}
+
+.overview-section {
+  background: #f8fbf8;
+  padding: 30px;
+  border-radius: 20px;
+  border: 1px solid #edf5ed;
+  flex: 2;
+}
+
+.impact-section {
+  flex: 1.4;
+}
+
+.overview-content {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 40px;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.donut-wrapper {
+  flex: 1;
+  min-width: 240px;
+  display: flex;
+  justify-content: center;
+}
+
+.donut-chart {
+  width: 240px;
+  height: 240px;
+  border-radius: 50%;
+  position: relative;
   display: flex;
   align-items: center;
-  gap: 20px;
-  transition: transform 0.3s, box-shadow 0.3s;
-  cursor: pointer;
+  justify-content: center;
+  box-shadow: inset 0 0 20px rgba(0, 0, 0, 0.08);
 }
 
-.stat-card:hover {
-  transform: translateY(-4px);
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.12);
+.donut-center {
+  width: 140px;
+  height: 140px;
+  background: white;
+  border-radius: 50%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
 }
 
-.stat-card:active {
-  transform: translateY(-2px);
-}
-
-.card-icon {
-  font-size: 3rem;
-}
-
-.card-content h3 {
+.center-value {
   font-size: 2.5rem;
+  font-weight: 700;
   color: #2c3e50;
-  margin-bottom: 5px;
+  line-height: 1.1;
 }
 
-.card-content p {
+.center-label {
+  font-size: 0.9rem;
   color: #5a6c5d;
-  font-size: 1rem;
 }
 
-.card-content small {
-  display: block;
-  font-size: 0.8rem;
-  color: #999;
-  margin-top: 8px;
+.donut-legend {
+  flex: 1;
+  min-width: 260px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 15px;
 }
 
-.total-saved {}
+.legend-item {
+  display: flex;
+  gap: 12px;
+  background: white;
+  padding: 12px 16px;
+  border-radius: 12px;
+  border: 1px solid #edf5ed;
+  align-items: center;
+}
 
-.items-used {}
+.legend-dot {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
 
-.items-donated {}
+.legend-label {
+  font-weight: 600;
+  color: #2c3e50;
+}
 
-.items-expired {}
+.legend-value {
+  color: #5a6c5d;
+  font-size: 0.9rem;
+}
 
 /* Impact Section */
 .impact-section,
 .stats-table-section,
-.time-series-section,
-.recent-activity-section {
-  background: white;
+.time-series-section {
+  background: #f8fbf8;
   padding: 30px;
   border-radius: 16px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
-  margin-bottom: 30px;
+  border: 1px solid #edf5ed;
 }
 
 .impact-section h2,
 .stats-table-section h2,
-.time-series-section h2,
-.recent-activity-section h2 {
+.time-series-section h2 {
   color: #2c3e50;
   margin-bottom: 20px;
   font-size: 1.5rem;
+}
+
+.time-series-header {
+  flex-wrap: wrap;
+  gap: 16px;
 }
 
 .impact-content {
@@ -770,41 +1264,167 @@ tbody td {
   padding: 20px 0;
 }
 
-.chart-container {
+.chart-wrapper {
   display: flex;
+  gap: 16px;
   align-items: flex-end;
-  gap: 4px;
-  height: 200px;
-  margin-bottom: 20px;
 }
 
-.chart-bar {
-  flex: 1;
+.y-axis {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 10px;
+}
+
+.axis-title {
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
+  font-size: 0.85rem;
+  color: #5a6c5d;
+  font-weight: 600;
+}
+
+.y-axis-ticks {
+  height: 220px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  align-items: flex-end;
+  font-size: 0.8rem;
+  color: #7a8a7a;
+}
+
+.y-axis-ticks .tick {
   position: relative;
-  background: #e3f2fd;
-  border-radius: 4px 4px 0 0;
-  min-height: 10px;
-  cursor: pointer;
-  transition: opacity 0.3s;
+  padding-right: 10px;
 }
 
-.chart-bar:hover {
-  opacity: 0.8;
-}
-
-.bar-segment {
+.y-axis-ticks .tick::after {
+  content: '';
   position: absolute;
-  bottom: 0;
+  right: 0;
+  top: 50%;
+  width: 8px;
+  height: 1px;
+  background: #c8d5c8;
+}
+
+.chart-area {
+  flex: 1;
+}
+
+/* Line Chart Styles */
+.line-chart {
   width: 100%;
-  border-radius: 4px 4px 0 0;
+  height: 250px;
+  background: #ffffff;
+  border-radius: 12px;
+  padding: 10px;
+  box-sizing: border-box;
 }
 
-.bar-segment.added {
-  background: #4CAF50;
+/* Grid lines */
+.grid-line {
+  stroke: #f0f0f0;
+  stroke-width: 1;
+  stroke-dasharray: 2, 2;
 }
 
-.bar-segment.used {
-  background: #2196F3;
+/* Y-axis title */
+.y-axis-title {
+  font-size: 12px;
+  fill: #2c3e50;
+  font-weight: 600;
+}
+
+/* Y-axis labels */
+.y-labels {
+  font-size: 11px;
+  fill: #7a8a7a;
+  font-weight: 500;
+}
+
+.y-label {
+  font-size: 11px;
+  fill: #7a8a7a;
+  font-weight: 500;
+}
+
+/* Area fills */
+.area-fill {
+  opacity: 1;
+}
+
+/* Lines */
+.line {
+  fill: none;
+  stroke-width: 3;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.line.added {
+  stroke: #4CAF50;
+}
+
+.line.used {
+  stroke: #2196F3;
+}
+
+/* Data points */
+.data-point {
+  fill: white;
+  stroke-width: 3;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.data-point.added {
+  stroke: #4CAF50;
+}
+
+.data-point.used {
+  stroke: #2196F3;
+}
+
+.data-point:hover {
+  r: 5;
+  filter: brightness(1.1);
+}
+
+.data-point-inner {
+  fill: white;
+  pointer-events: none;
+}
+
+.data-point-inner.added {
+  fill: #4CAF50;
+}
+
+.data-point-inner.used {
+  fill: #2196F3;
+}
+
+/* X-axis labels */
+.x-labels {
+  font-size: 10px;
+  fill: #7a8a7a;
+  font-weight: 500;
+}
+
+.x-label {
+  font-size: 10px;
+  fill: #7a8a7a;
+  font-weight: 500;
+}
+
+.x-axis-title {
+  text-align: center;
+  font-size: 0.85rem;
+  color: #5a6c5d;
+  font-weight: 600;
+  margin-top: 8px;
 }
 
 .chart-legend {
@@ -835,66 +1455,13 @@ tbody td {
   background: #2196F3;
 }
 
-/* Recent Activity */
-.activity-list {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.activity-item {
-  display: flex;
-  align-items: center;
-  gap: 15px;
-  padding: 15px;
-  background: #f9f9f9;
-  border-radius: 10px;
-  transition: background 0.3s;
-}
-
-.activity-item:hover {
-  background: #f0f0f0;
-}
-
-.activity-icon {
-  width: 40px;
-  height: 40px;
-  background: #4CAF50;
-  color: white;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 1.2rem;
-  flex-shrink: 0;
-}
-
-.activity-content {
-  flex: 1;
-}
-
-.activity-name {
-  font-weight: 600;
-  color: #2c3e50;
-  margin-bottom: 5px;
-}
-
-.activity-meta {
-  display: flex;
-  gap: 15px;
-  font-size: 0.9rem;
-  color: #5a6c5d;
-}
-
-.activity-category {
-  padding: 2px 8px;
-  background: #e0e0e0;
-  border-radius: 12px;
-}
-
 /* Responsive */
 @media (max-width: 768px) {
   .analytics-page {
+    padding: 20px;
+  }
+
+  .analytics-card {
     padding: 20px;
   }
 
@@ -902,8 +1469,21 @@ tbody td {
     font-size: 2rem;
   }
 
-  .summary-cards {
+  .stat-grid {
     grid-template-columns: 1fr;
+  }
+
+  .overview-impact-row {
+    flex-direction: column;
+  }
+
+  .overview-content {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .donut-wrapper {
+    justify-content: center;
   }
 
   .impact-content {
